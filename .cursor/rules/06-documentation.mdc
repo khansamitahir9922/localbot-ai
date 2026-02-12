@@ -1,0 +1,20 @@
+---
+description: "LocalBot AI – Documentation standards and comment conventions"
+globs: ["src/**/*.ts", "src/**/*.tsx"]
+alwaysApply: false
+---
+# 📄 DOCUMENTATION & COMMENTS
+
+## 📝 JSDOC REQUIREMENTS:
+- ✅ **ALL** exported functions, types, interfaces, and classes MUST have JSDoc comments.
+- ✅ **ALL** non-trivial internal functions SHOULD have JSDoc.
+- ✅ **Describe WHAT and WHY, not HOW** (code shows how).
+
+✅ **GOOD**:
+```ts
+/**
+ * Calculates the total conversations used by a workspace in the current billing period.
+ * Used for enforcing tier limits and displaying usage analytics.
+ * @param workspaceId - UUID of the workspace
+ * @returns Number of conversations in current month, or null if error
+ */

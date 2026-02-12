@@ -1,0 +1,41 @@
+---
+description: "LocalBot AI – Tailwind + shadcn/ui styling standards"
+globs: ["src/**/*.tsx", "src/**/*.css"]
+alwaysApply: true
+---
+# 🎨 UI & STYLING – TAILWIND + SHADCN
+
+## 🧱 CORE PRINCIPLES:
+- **Tailwind CSS ONLY** – NO CSS modules, NO styled-components, NO Emotion.
+- **shadcn/ui** for all primitive components (buttons, inputs, dialogs, etc.).
+- **NEVER** build custom UI primitives from scratch – extend shadcn.
+- **Radix UI** for headless component behavior (via shadcn).
+
+## 🎨 COLOR SYSTEM:
+- **Primary**: `#2563EB` (blue-600) – actions, CTAs, brand
+- **Secondary**: `#1E3A5F` (navy) – headers, footer, accents
+- **Background**: white / gray-50
+- **Text**: gray-900 (primary), gray-600 (secondary)
+- **Success**: green-600
+- **Warning**: yellow-600
+- **Error**: red-600
+
+## 📱 RESPONSIVE:
+- **Mobile-first** – always design for mobile first, then `md:` and `lg:` overrides.
+- **Breakpoints**: sm (640px), md (768px), lg (1024px), xl (1280px)
+- **Touch targets**: minimum 44px × 44px for interactive elements.
+
+## 🌗 DARK MODE:
+- Support dark mode via `dark:` variants.
+- Use CSS variables via `next-themes`.
+- All shadcn components have dark mode built-in – preserve it.
+
+## ✅ DO:
+- Use `cn()` utility from `@/lib/utils` for conditional classes.
+- Extract repeated class combinations into components.
+- Use Tailwind's `@apply` in component-scoped CSS files for complex patterns.
+
+## ❌ DON'T:
+- DON'T use inline `style` props except for dynamic runtime values.
+- DON'T override shadcn component styles globally – extend via `className`.
+- DON'T use arbitrary values (e.g., `w-[123px]`) unless absolutely necessary – use theme scale.

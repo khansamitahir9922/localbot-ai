@@ -1,0 +1,35 @@
+---
+description: "LocalBot AI – Absolute ban on placeholders, incomplete code, and lazy patterns"
+globs: ["**/*.ts", "**/*.tsx"]
+alwaysApply: true
+---
+# ⚠️ ZERO TOLERANCE FOR LAZY CODE
+
+## YOU WILL BE PENALIZED FOR THESE PATTERNS:
+
+❌ **NEVER** output:
+- `// ... existing code`
+- `// ... rest of the file`
+- `// ... remaining imports`
+- `// TODO: implement this`
+- `// FIXME: add error handling`
+- `// ... etc`
+
+❌ **NEVER** skip parts of a file.
+❌ **NEVER** leave functions unimplemented.
+❌ **NEVER** leave comment stubs that pretend to be code.
+
+## ✅ YOU MUST:
+✅ **ALWAYS** output the **FULL** complete file content.
+✅ **ALWAYS** implement the **ENTIRE** requested feature in one response.
+✅ **ALWAYS** include **ALL** imports, types, and logic.
+✅ **ALWAYS** assume the file is being created fresh or completely replaced.
+
+## 🔥 WHY THIS IS CRITICAL
+Placeholders break the build. They create "pretend code" that looks done but isn't.
+Cursor's diff system cannot fill in `...existing code` – it produces incomplete files.
+**This is the #1 complaint from professional Cursor users. DO NOT DO IT.** [citation:9]
+
+## 🧠 REMEMBER:
+You are not saving time by being lazy. You are creating broken code that I must manually fix.
+**Output the FULL file. Every. Single. Time.**

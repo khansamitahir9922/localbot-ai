@@ -1,0 +1,35 @@
+---
+description: "LocalBot AI – Security, authentication, and authorization"
+globs: ["src/**/*.ts", "src/app/api/**/*.ts"]
+alwaysApply: true
+---
+# 🔐 SECURITY & AUTHORIZATION
+
+## 🆔 AUTHENTICATION:
+- **Supabase Auth** – NO custom auth, NO NextAuth.js.
+- **Middleware**: `src/middleware.ts` protects ALL `/dashboard/*` routes.
+- **Session**: Always use `@supabase/auth-helpers-nextjs` server/client components.
+
+## 🛡️ AUTHORIZATION – CRITICAL:
+**EVERY API ROUTE THAT MODIFIES DATA MUST:**
+1. ✅ Verify user is authenticated (get user from Supabase session)
+2. ✅ Verify user owns the resource (check `user_id` match)
+3. ✅ Return `401` or `403` with clear error message
+4. ✅ NEVER trust client-side IDs without ownership verification
+
+## 🔑 API KEYS & SECRETS:
+- **NEVER** expose `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY` to client.
+- **NEVER** commit `.env.local` – it's in `.gitignore`.
+- **NEVER** hardcode secrets in source files.
+
+## 📦 RLS (ROW LEVEL SECURITY):
+- ALL Supabase tables must have RLS enabled.
+- ALL RLS policies must restrict access to authenticated user's own data.
+- Test RLS policies with `service_role` vs `anon` key.
+
+## 🚦 RATE LIMITING:
+- **Chat API**: 10 requests/minute per embed token.
+- **Auth endpoints**: 5 requests/minute per IP.
+- **Crawl API**: 3 requests/hour per user (free tier), 20/hour (paid).
+
+## ⚠️ IF UNSURE ABOUT SECURITY IMPLICATIONS: ASK.

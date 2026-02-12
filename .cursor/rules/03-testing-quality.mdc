@@ -1,0 +1,29 @@
+---
+description: "LocalBot AI – Testing requirements and quality gates"
+globs: ["src/**/*.ts", "src/**/*.tsx"]
+alwaysApply: false
+---
+# 🧪 TESTING & QUALITY
+
+## WHEN TESTS ARE REQUESTED OR INFERRED:
+- ✅ **Every utility function** needs a unit test.
+- ✅ **Every API route** needs integration test coverage for success + error paths.
+- ✅ **Every React component** with logic needs a component test.
+- ✅ **Test files** must be colocated: `Component.tsx` → `Component.test.tsx`
+
+## TESTING STACK:
+- **Framework**: Vitest
+- **React Testing Library** for components
+- **MSW** for API mocking
+- **Supertest** for API route integration tests
+
+## COVERAGE TARGETS:
+- 🎯 **80%+** for business logic
+- 🎯 **70%+** for components
+- 🎯 **90%+** for critical paths (auth, payments, chat API)
+
+## BEFORE MARKING TASK COMPLETE:
+1. ✅ Verify no TypeScript errors (`tsc --noEmit`)
+2. ✅ Verify linting passes (`eslint .`)
+3. ✅ Verify tests pass (`npm test`)
+4. ✅ Verify feature works in browser
