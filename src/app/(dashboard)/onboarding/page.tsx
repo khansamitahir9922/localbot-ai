@@ -6,12 +6,21 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod/v4";
 import {
   ArrowLeft,
+  Check,
+  ClipboardCopy,
+  Code,
   FileText,
   Globe,
+  Link2,
   Loader2,
+  Mail,
   MessageCircle,
   MessageSquareText,
+  PartyPopper,
+  QrCode,
+  Rocket,
   Send,
+  Share2,
   Upload,
   X,
 } from "lucide-react";
@@ -42,6 +51,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 
 /* ═══════════════════════════════════════════════════════════════════
    ROUTER – renders the correct step based on Zustand store
@@ -65,13 +80,7 @@ export default function OnboardingPage(): React.JSX.Element {
     case 3:
       return <Step3Customize />;
     case 4:
-      return (
-        <PlaceholderStep
-          title="Deploy Your Chatbot"
-          description="This step is coming next."
-          step={4}
-        />
-      );
+      return <Step4Deploy />;
     default:
       return <Step1BusinessInfo />;
   }
@@ -954,41 +963,662 @@ function WidgetPreview({
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   PLACEHOLDER STEP (Step 4 – built next)
+   STEP 4 – DEPLOY & EMBED CODE
    ═══════════════════════════════════════════════════════════════════ */
 
-function PlaceholderStep({
-  title,
-  description,
-  step,
-}: {
-  title: string;
-  description: string;
-  step: 4;
-}): React.JSX.Element {
-  const { setCurrentStep } = useOnboardingStore();
+/**
+ * Onboarding Step 4 – Deploy & Embed Code.
+ *
+ * Creates the chatbot row in Supabase (once) using all data gathered in
+ * Steps 1-3, then displays the embed `<script>` snippet the user can
+ * paste into their website.
+ */
+function Step4Deploy(): React.JSX.Element {
+  const { setCurrentStep, onboardingData, updateOnboardingData } =
+    useOnboardingStore();
 
+  const [isCreating, setIsCreating] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [embedToken, setEmbedToken] = useState<string | null>(
+    onboardingData.embedToken ?? null
+  );
+  const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const creationAttempted = useRef(false);
+
+  /* ── Create chatbot row on first mount ── */
+  useEffect(() => {
+    /* Guard: only run once, and skip if already created. */
+    if (creationAttempted.current) return;
+    creationAttempted.current = true;
+
+    if (onboardingData.chatbotId && onboardingData.embedToken) {
+      setEmbedToken(onboardingData.embedToken);
+      setIsCreating(false);
+      return;
+    }
+
+    async function createChatbot(): Promise<void> {
+      try {
+        const supabase = createClient();
+        const customization = onboardingData.customization;
+
+        if (!onboardingData.workspaceId) {
+          setError("Workspace not found. Please go back to Step 1.");
+          setIsCreating(false);
+          return;
+        }
+
+        const { data, error: insertError } = await supabase
+          .from("chatbots")
+          .insert({
+            workspace_id: onboardingData.workspaceId,
+            name: customization?.botName || onboardingData.businessName || "My Chatbot",
+            bot_name: customization?.botName || "Assistant",
+            primary_color: customization?.primaryColor || "#2563EB",
+            welcome_message:
+              customization?.welcomeMessage ||
+              "Hi! How can I help you today?",
+            fallback_message:
+              customization?.fallbackMessage ||
+              "I'm not sure about that. Please contact us for more help.",
+            widget_position: customization?.widgetPosition || "bottom-right",
+            show_branding: true,
+          })
+          .select("id, embed_token")
+          .single();
+
+        if (insertError) {
+          setError(
+            insertError.message || "Failed to create chatbot. Please try again."
+          );
+          setIsCreating(false);
+          return;
+        }
+
+        updateOnboardingData({
+          chatbotId: data.id,
+          embedToken: data.embed_token,
+        });
+        setEmbedToken(data.embed_token);
+        setIsCreating(false);
+        toast.success("Chatbot created successfully!");
+      } catch {
+        setError("An unexpected error occurred. Please try again.");
+        setIsCreating(false);
+      }
+    }
+
+    createChatbot();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Build the embed snippet using the public token. */
+  const embedSnippet = embedToken
+    ? `<!-- LocalBot AI Widget -->\n<script\n  src="${typeof window !== "undefined" ? window.location.origin : ""}/widget.js"\n  data-chatbot-id="${embedToken}"\n  defer\n></script>`
+    : "";
+
+  /** Chat page URL the owner can share directly. */
+  const chatPageUrl =
+    typeof window !== "undefined" && embedToken
+      ? `${window.location.origin}/chat/${embedToken}`
+      : "";
+
+  /** Copy the embed code to clipboard. */
+  async function handleCopy(): Promise<void> {
+    if (!embedSnippet) return;
+    try {
+      await navigator.clipboard.writeText(embedSnippet);
+      setCopied(true);
+      toast.success("Embed code copied to clipboard!");
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      toast.error("Failed to copy. Please select and copy manually.");
+    }
+  }
+
+  /* ── Loading state ── */
+  if (isCreating) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center gap-4 py-16">
+          <Loader2 className="size-10 animate-spin text-[#2563EB]" />
+          <p className="text-base font-medium text-[#1E3A5F]">
+            Creating your chatbot…
+          </p>
+          <p className="text-sm text-slate-500">
+            This only takes a moment.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  /* ── Error state ── */
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl font-bold text-red-600">
+            Something went wrong
+          </CardTitle>
+          <CardDescription>{error}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCurrentStep(3)}
+              className="h-11 border-slate-300 text-base font-semibold text-[#1E3A5F]"
+            >
+              <ArrowLeft className="size-4" />
+              Back
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setIsCreating(true);
+                creationAttempted.current = false;
+              }}
+              className="h-11 bg-[#2563EB] text-base font-semibold shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
+            >
+              Try Again
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  /** Copy the shareable chat link. */
+  async function handleCopyLink(): Promise<void> {
+    if (!chatPageUrl) return;
+    try {
+      await navigator.clipboard.writeText(chatPageUrl);
+      setLinkCopied(true);
+      toast.success("Chat link copied!");
+      setTimeout(() => setLinkCopied(false), 2500);
+    } catch {
+      toast.error("Failed to copy link.");
+    }
+  }
+
+  /** Open the user's email client with the embed code pre-filled. */
+  function handleEmailToDeveloper(): void {
+    const subject = encodeURIComponent(
+      `Add the ${onboardingData.businessName ?? "LocalBot AI"} chatbot to our website`
+    );
+    const body = encodeURIComponent(
+      `Hi,\n\nPlease add our AI chatbot to the website. Here is the embed code — paste it just before the closing </body> tag on every page:\n\n${embedSnippet}\n\nYou can also test it first by visiting:\n${chatPageUrl}\n\nThanks!`
+    );
+    window.open(`mailto:?subject=${subject}&body=${body}`, "_self");
+  }
+
+  /* ── Success state – show embed code ── */
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl font-bold text-[#1E3A5F]">
-          {title}
-        </CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-center justify-between pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setCurrentStep((step - 1) as 3)}
-            className="h-11 border-slate-300 text-base font-semibold text-[#1E3A5F]"
-          >
-            <ArrowLeft className="size-4" />
-            Back
-          </Button>
+    <div className="flex flex-col gap-6">
+      {/* ────── Success banner ────── */}
+      <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-green-200 bg-green-50 p-6 text-center">
+        <div className="flex size-14 items-center justify-center rounded-full bg-green-100">
+          <PartyPopper className="size-7 text-green-600" />
         </div>
-      </CardContent>
-    </Card>
+        <h2 className="text-xl font-bold text-[#1E3A5F]">
+          Your chatbot is ready!
+        </h2>
+        <p className="max-w-lg text-sm leading-relaxed text-slate-600">
+          Choose how you&apos;d like to add it to your website. If
+          you&apos;re not technical, just click{" "}
+          <strong>&quot;Email to my developer&quot;</strong> — they&apos;ll
+          handle the rest.
+        </p>
+      </div>
+
+      {/* ────── Quick-share options (non-technical) ────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Share2 className="size-5 text-[#2563EB]" />
+            <CardTitle className="text-lg font-bold text-[#1E3A5F]">
+              Easiest Ways to Share
+            </CardTitle>
+          </div>
+          <CardDescription>
+            No coding required — perfect if you just want to get started
+            quickly.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="flex flex-col gap-4">
+          {/* Shareable direct link */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <Link2 className="size-4 text-[#2563EB]" />
+              <h4 className="text-sm font-semibold text-[#1E3A5F]">
+                Share a Direct Chat Link
+              </h4>
+            </div>
+            <p className="mb-3 text-sm text-slate-500">
+              Share this link with customers on social media, WhatsApp,
+              Google Business, or anywhere. They&apos;ll be able to chat
+              with your bot instantly — no website changes needed.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 truncate rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                {chatPageUrl || "Generating…"}
+              </code>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleCopyLink}
+                className="shrink-0"
+              >
+                {linkCopied ? (
+                  <>
+                    <Check className="size-3.5" /> Copied
+                  </>
+                ) : (
+                  <>
+                    <ClipboardCopy className="size-3.5" /> Copy Link
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Coming soon: a custom branded page at{" "}
+              <span className="font-medium">
+                localbot.ai/chat/your-business
+              </span>
+            </p>
+          </div>
+
+          {/* Email to developer */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <Mail className="size-4 text-[#2563EB]" />
+              <h4 className="text-sm font-semibold text-[#1E3A5F]">
+                Email to My Web Developer
+              </h4>
+            </div>
+            <p className="mb-3 text-sm text-slate-500">
+              Don&apos;t want to touch code? Click the button below and
+              we&apos;ll open an email with all the instructions your web
+              developer (or tech-savvy friend) needs.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleEmailToDeveloper}
+              className="border-[#2563EB]/30 text-[#2563EB] hover:bg-[#2563EB]/5"
+            >
+              <Mail className="size-4" />
+              Email Instructions to Developer
+            </Button>
+          </div>
+
+          {/* QR Code placeholder */}
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <QrCode className="size-4 text-slate-400" />
+              <h4 className="text-sm font-semibold text-slate-400">
+                QR Code
+              </h4>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Coming Soon
+              </span>
+            </div>
+            <p className="text-sm text-slate-400">
+              Download a QR code that links to your chatbot. Print it on
+              menus, receipts, table cards, or business cards so customers
+              can scan and chat instantly.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ────── Embed code (for technical users) ────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Code className="size-5 text-[#2563EB]" />
+            <CardTitle className="text-lg font-bold text-[#1E3A5F]">
+              Embed on Your Website
+            </CardTitle>
+          </div>
+          <CardDescription>
+            For adding the chat widget directly to your website. If this
+            looks confusing, use the &quot;Email to Developer&quot; option
+            above instead.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="flex flex-col gap-4">
+          {/* Code block */}
+          <div className="relative">
+            <pre className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-900 p-4 text-sm leading-relaxed text-slate-100">
+              <code>{embedSnippet}</code>
+            </pre>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className={cn(
+                "absolute right-3 top-3 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+                copied
+                  ? "bg-green-600 text-white"
+                  : "bg-white/10 text-white hover:bg-white/20"
+              )}
+            >
+              {copied ? (
+                <>
+                  <Check className="size-3.5" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <ClipboardCopy className="size-3.5" />
+                  Copy Code
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Platform tabs */}
+          <Tabs defaultValue="wordpress" className="w-full">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="wordpress">WordPress</TabsTrigger>
+              <TabsTrigger value="wix">Wix</TabsTrigger>
+              <TabsTrigger value="squarespace">Squarespace</TabsTrigger>
+              <TabsTrigger value="html">Other / HTML</TabsTrigger>
+            </TabsList>
+
+            {/* ── WordPress (beginner-friendly WPCode method) ── */}
+            <TabsContent value="wordpress">
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                <h4 className="mb-1 text-sm font-semibold text-[#1E3A5F]">
+                  WordPress (easiest method — no coding)
+                </h4>
+                <p className="mb-3 text-xs text-slate-500">
+                  We recommend using the free WPCode plugin. It takes
+                  about 2 minutes.
+                </p>
+                <ol className="flex flex-col gap-2 text-sm text-slate-600">
+                  <li className="flex gap-2">
+                    <StepBadge n={1} />
+                    <span>
+                      Log in to your WordPress admin panel (usually{" "}
+                      <code className="rounded bg-slate-200 px-1 py-0.5 font-mono text-xs">
+                        yoursite.com/wp-admin
+                      </code>
+                      ).
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={2} />
+                    <span>
+                      In the left menu, click{" "}
+                      <strong>Plugins → Add New</strong>. Search for{" "}
+                      <strong>&quot;WPCode&quot;</strong>. Click{" "}
+                      <strong>Install Now</strong>, then{" "}
+                      <strong>Activate</strong>.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={3} />
+                    <span>
+                      In the left menu you&apos;ll now see{" "}
+                      <strong>Code Snippets</strong>. Click it, then click{" "}
+                      <strong>+ Add Snippet → Add Your Custom Code</strong>.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={4} />
+                    <span>
+                      Give it a name like{" "}
+                      <strong>&quot;LocalBot AI Chatbot&quot;</strong>.
+                      Change the code type to{" "}
+                      <strong>HTML Snippet</strong>.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={5} />
+                    <span>
+                      Click the <strong>&quot;Copy Code&quot;</strong>{" "}
+                      button above and paste it into the big code box.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={6} />
+                    <span>
+                      Scroll down to <strong>Insertion</strong> and set
+                      the location to{" "}
+                      <strong>Site Wide Footer</strong>.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={7} />
+                    <span>
+                      Toggle the snippet to <strong>Active</strong> and
+                      click <strong>Save Snippet</strong>. Done! Visit
+                      your website and you&apos;ll see the chat bubble.
+                    </span>
+                  </li>
+                </ol>
+              </div>
+            </TabsContent>
+
+            {/* ── Wix ── */}
+            <TabsContent value="wix">
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                <h4 className="mb-1 text-sm font-semibold text-[#1E3A5F]">
+                  Wix
+                </h4>
+                <p className="mb-3 text-xs text-slate-500">
+                  Takes about 2 minutes from your Wix dashboard.
+                </p>
+                <ol className="flex flex-col gap-2 text-sm text-slate-600">
+                  <li className="flex gap-2">
+                    <StepBadge n={1} />
+                    <span>
+                      Log in to your{" "}
+                      <strong>Wix Dashboard</strong> (wix.com → My
+                      Sites → select your site).
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={2} />
+                    <span>
+                      Click <strong>Settings</strong> in the left
+                      sidebar, then scroll down and click{" "}
+                      <strong>Custom Code</strong> (under the Advanced
+                      section).
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={3} />
+                    <span>
+                      Click the <strong>+ Add Custom Code</strong>{" "}
+                      button at the top right.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={4} />
+                    <span>
+                      Click <strong>&quot;Copy Code&quot;</strong> above,
+                      then paste it into the code box.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={5} />
+                    <span>
+                      Give it the name{" "}
+                      <strong>&quot;LocalBot AI Chatbot&quot;</strong>.
+                      Under &quot;Add Code to Pages&quot;, select{" "}
+                      <strong>All Pages</strong>. Under &quot;Place
+                      Code in&quot;, select{" "}
+                      <strong>Body - end</strong>.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={6} />
+                    <span>
+                      Click <strong>Apply</strong>. Then{" "}
+                      <strong>Publish</strong> your site. The chat
+                      widget will appear on every page!
+                    </span>
+                  </li>
+                </ol>
+              </div>
+            </TabsContent>
+
+            {/* ── Squarespace ── */}
+            <TabsContent value="squarespace">
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                <h4 className="mb-1 text-sm font-semibold text-[#1E3A5F]">
+                  Squarespace
+                </h4>
+                <p className="mb-3 text-xs text-slate-500">
+                  Requires a Business plan or higher. Takes about 1
+                  minute.
+                </p>
+                <ol className="flex flex-col gap-2 text-sm text-slate-600">
+                  <li className="flex gap-2">
+                    <StepBadge n={1} />
+                    <span>
+                      Log in to your Squarespace site and click{" "}
+                      <strong>Settings</strong> in the left menu.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={2} />
+                    <span>
+                      Scroll down to{" "}
+                      <strong>Developer Tools</strong> and click{" "}
+                      <strong>Code Injection</strong>.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={3} />
+                    <span>
+                      You&apos;ll see a text box labelled{" "}
+                      <strong>Footer</strong>. Click{" "}
+                      <strong>&quot;Copy Code&quot;</strong> above and
+                      paste it into that box.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={4} />
+                    <span>
+                      Click <strong>Save</strong> at the top. The chat
+                      widget now appears on every page of your site!
+                    </span>
+                  </li>
+                </ol>
+              </div>
+            </TabsContent>
+
+            {/* ── Other / HTML ── */}
+            <TabsContent value="html">
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                <h4 className="mb-1 text-sm font-semibold text-[#1E3A5F]">
+                  Any Other Website
+                </h4>
+                <p className="mb-3 text-xs text-slate-500">
+                  Works with Shopify, Webflow, GoDaddy, or any site
+                  where you can edit HTML.
+                </p>
+                <ol className="flex flex-col gap-2 text-sm text-slate-600">
+                  <li className="flex gap-2">
+                    <StepBadge n={1} />
+                    <span>
+                      Click <strong>&quot;Copy Code&quot;</strong> above.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={2} />
+                    <span>
+                      Open the file or editor where your website&apos;s
+                      HTML lives. Look for the very bottom of the page.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={3} />
+                    <span>
+                      Find the line that says{" "}
+                      <code className="rounded bg-slate-200 px-1 py-0.5 font-mono text-xs">
+                        &lt;/body&gt;
+                      </code>
+                      . Paste the code <strong>right above</strong> that
+                      line.
+                    </span>
+                  </li>
+                  <li className="flex gap-2">
+                    <StepBadge n={4} />
+                    <span>
+                      Save and refresh your website. You&apos;ll see the
+                      chat bubble in the corner!
+                    </span>
+                  </li>
+                </ol>
+                <p className="mt-3 text-xs text-slate-400">
+                  Tip: If your website builder has a &quot;Custom
+                  Code&quot; or &quot;Footer Scripts&quot; section, paste
+                  it there instead — it&apos;s easier.
+                </p>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          {/* Embed token reference */}
+          {embedToken && (
+            <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
+              <span className="font-medium text-slate-700">
+                Chatbot ID:
+              </span>
+              <code className="rounded bg-slate-200 px-2 py-0.5 font-mono text-xs text-slate-700">
+                {embedToken}
+              </code>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ────── Navigation ────── */}
+      <div className="flex items-center justify-between">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setCurrentStep(3)}
+          className="h-11 border-slate-300 text-base font-semibold text-[#1E3A5F]"
+        >
+          <ArrowLeft className="size-4" />
+          Back
+        </Button>
+        <Button
+          type="button"
+          onClick={() => {
+            window.location.href = "/dashboard";
+          }}
+          className="h-11 min-w-[180px] bg-[#2563EB] text-base font-semibold shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
+        >
+          <Rocket className="size-4" />
+          Go to Dashboard
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SHARED HELPERS
+   ═══════════════════════════════════════════════════════════════════ */
+
+/** Numbered circle badge used inside installation instruction lists. */
+function StepBadge({ n }: { n: number }): React.JSX.Element {
+  return (
+    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#2563EB] text-[10px] font-bold text-white">
+      {n}
+    </span>
   );
 }

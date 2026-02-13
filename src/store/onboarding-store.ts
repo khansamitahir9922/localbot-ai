@@ -58,6 +58,8 @@ export interface OnboardingData {
 
   /* ── Step 4 ── */
   chatbotId?: string;
+  /** Public embed token used in the widget script tag. */
+  embedToken?: string;
 }
 
 /** Shape of the Zustand onboarding store. */
