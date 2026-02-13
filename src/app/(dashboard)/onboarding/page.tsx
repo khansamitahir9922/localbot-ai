@@ -9,7 +9,9 @@ import {
   FileText,
   Globe,
   Loader2,
+  MessageCircle,
   MessageSquareText,
+  Send,
   Upload,
   X,
 } from "lucide-react";
@@ -18,6 +20,8 @@ import { createClient } from "@/lib/supabase/client";
 import {
   useOnboardingStore,
   type TrainingMethod,
+  type WidgetPosition,
+  type CustomizationData,
 } from "@/store/onboarding-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -30,6 +34,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -58,17 +63,11 @@ export default function OnboardingPage(): React.JSX.Element {
     case 2:
       return <Step2TrainYourBot />;
     case 3:
-      return (
-        <PlaceholderStep
-          title="Customize Your Bot"
-          description="This step is coming next."
-          step={3}
-        />
-      );
+      return <Step3Customize />;
     case 4:
       return (
         <PlaceholderStep
-          title="Deploy"
+          title="Deploy Your Chatbot"
           description="This step is coming next."
           step={4}
         />
@@ -121,13 +120,6 @@ const businessInfoSchema = z.object({
 
 type BusinessInfoFormValues = z.infer<typeof businessInfoSchema>;
 
-/**
- * Onboarding Step 1 – Business Info.
- *
- * Collects the user's business name, type, website URL, and preferred
- * language. On submit it creates a new row in the `workspaces` table
- * and advances the wizard to Step 2.
- */
 function Step1BusinessInfo(): React.JSX.Element {
   const [userId, setUserId] = useState<string | null>(null);
   const { setCurrentStep, updateOnboardingData } = useOnboardingStore();
@@ -217,7 +209,6 @@ function Step1BusinessInfo(): React.JSX.Element {
           className="flex flex-col gap-6"
           noValidate
         >
-          {/* ── Business Name ── */}
           <div className="flex flex-col gap-2">
             <Label htmlFor="businessName">Business Name</Label>
             <Input
@@ -235,17 +226,13 @@ function Step1BusinessInfo(): React.JSX.Element {
             )}
           </div>
 
-          {/* ── Business Type ── */}
           <div className="flex flex-col gap-2">
             <Label htmlFor="businessType">Business Type</Label>
             <Controller
               control={control}
               name="businessType"
               render={({ field }) => (
-                <Select
-                  value={field.value}
-                  onValueChange={field.onChange}
-                >
+                <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger
                     id="businessType"
                     className="w-full"
@@ -270,7 +257,6 @@ function Step1BusinessInfo(): React.JSX.Element {
             )}
           </div>
 
-          {/* ── Website URL ── */}
           <div className="flex flex-col gap-2">
             <Label htmlFor="websiteUrl">
               Website URL{" "}
@@ -291,17 +277,13 @@ function Step1BusinessInfo(): React.JSX.Element {
             )}
           </div>
 
-          {/* ── Language ── */}
           <div className="flex flex-col gap-2">
             <Label htmlFor="language">Preferred Language</Label>
             <Controller
               control={control}
               name="language"
               render={({ field }) => (
-                <Select
-                  value={field.value}
-                  onValueChange={field.onChange}
-                >
+                <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger
                     id="language"
                     className="w-full"
@@ -326,7 +308,6 @@ function Step1BusinessInfo(): React.JSX.Element {
             )}
           </div>
 
-          {/* ── Submit ── */}
           <div className="flex justify-end pt-2">
             <Button
               type="submit"
@@ -356,7 +337,6 @@ function Step1BusinessInfo(): React.JSX.Element {
 const MAX_FILE_SIZE_MB = 10;
 const ACCEPTED_FILE_TYPES = ".pdf,.docx";
 
-/** Training method option metadata. */
 const TRAINING_OPTIONS: {
   method: TrainingMethod;
   icon: React.ReactNode;
@@ -386,17 +366,6 @@ const TRAINING_OPTIONS: {
   },
 ];
 
-/**
- * Onboarding Step 2 – Train Your Bot.
- *
- * Lets the user choose how they want to train their chatbot:
- * 1. Website URL (crawl)
- * 2. Manual Q&A
- * 3. Document upload
- *
- * Selection and supporting inputs are stored in the Zustand onboarding
- * store. On "Next", the wizard advances to Step 3.
- */
 function Step2TrainYourBot(): React.JSX.Element {
   const { setCurrentStep, onboardingData, updateOnboardingData } =
     useOnboardingStore();
@@ -414,51 +383,39 @@ function Step2TrainYourBot(): React.JSX.Element {
   const [urlError, setUrlError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /** Select a training method and clear irrelevant inputs. */
   function handleSelectMethod(method: TrainingMethod): void {
     setSelectedMethod(method);
     setUrlError(null);
-
-    if (method !== "website") {
-      setWebsiteUrl("");
-    }
+    if (method !== "website") setWebsiteUrl("");
     if (method !== "document") {
       setSelectedFile(null);
       setFileName("");
     }
   }
 
-  /** Handle file selection with size + type validation. */
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): void {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       toast.error(`File must be smaller than ${MAX_FILE_SIZE_MB}MB.`);
       e.target.value = "";
       return;
     }
-
     setSelectedFile(file);
     setFileName(file.name);
   }
 
-  /** Remove the selected file. */
   function handleRemoveFile(): void {
     setSelectedFile(null);
     setFileName("");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  /** Validate and advance to Step 3. */
   function handleNext(): void {
     if (!selectedMethod) {
       toast.error("Please select a training method.");
       return;
     }
-
     if (selectedMethod === "website") {
       if (!websiteUrl.trim()) {
         setUrlError("Please enter your website URL.");
@@ -472,8 +429,6 @@ function Step2TrainYourBot(): React.JSX.Element {
         return;
       }
     }
-
-    /* Persist selections in the Zustand store. */
     updateOnboardingData({
       trainingMethod: selectedMethod,
       trainingWebsiteUrl:
@@ -481,7 +436,6 @@ function Step2TrainYourBot(): React.JSX.Element {
       documentFileName:
         selectedMethod === "document" ? fileName : undefined,
     });
-
     toast.success("Training method saved!");
     setCurrentStep(3);
   }
@@ -499,11 +453,9 @@ function Step2TrainYourBot(): React.JSX.Element {
       </CardHeader>
 
       <CardContent className="flex flex-col gap-6">
-        {/* ── Method cards ── */}
         <div className="flex flex-col gap-4">
           {TRAINING_OPTIONS.map((option) => {
             const isSelected = selectedMethod === option.method;
-
             return (
               <button
                 key={option.method}
@@ -542,9 +494,6 @@ function Step2TrainYourBot(): React.JSX.Element {
           })}
         </div>
 
-        {/* ── Conditional inputs based on selected method ── */}
-
-        {/* Website URL input */}
         {selectedMethod === "website" && (
           <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4">
             <Label htmlFor="trainingUrl">Website URL</Label>
@@ -568,11 +517,9 @@ function Step2TrainYourBot(): React.JSX.Element {
           </div>
         )}
 
-        {/* Document upload input */}
         {selectedMethod === "document" && (
           <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
             <Label>Upload Document</Label>
-
             {fileName ? (
               <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
                 <div className="flex items-center gap-3">
@@ -605,7 +552,6 @@ function Step2TrainYourBot(): React.JSX.Element {
                 </span>
               </button>
             )}
-
             <input
               ref={fileInputRef}
               type="file"
@@ -616,7 +562,6 @@ function Step2TrainYourBot(): React.JSX.Element {
           </div>
         )}
 
-        {/* ── Navigation buttons ── */}
         <div className="flex items-center justify-between pt-2">
           <Button
             type="button"
@@ -642,13 +587,376 @@ function Step2TrainYourBot(): React.JSX.Element {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   PLACEHOLDER STEP (for Steps 3 & 4 – built later)
+   STEP 3 – CUSTOMIZE APPEARANCE
+   ═══════════════════════════════════════════════════════════════════ */
+
+const DEFAULT_PRIMARY_COLOR = "#2563EB";
+const DEFAULT_FALLBACK =
+  "I'm not sure about that. Please call us at [phone] for more help.";
+
+/**
+ * Onboarding Step 3 – Customize Appearance.
+ *
+ * Lets the user configure the chatbot's name, colour, welcome message,
+ * fallback message, and widget position. A live preview panel on the
+ * right (or below on mobile) shows a mockup of the chat widget.
+ */
+function Step3Customize(): React.JSX.Element {
+  const { setCurrentStep, onboardingData, updateOnboardingData } =
+    useOnboardingStore();
+
+  const defaultBotName = onboardingData.businessName
+    ? `${onboardingData.businessName} Assistant`
+    : "My Assistant";
+
+  const saved = onboardingData.customization;
+
+  const [botName, setBotName] = useState(saved?.botName ?? defaultBotName);
+  const [primaryColor, setPrimaryColor] = useState(
+    saved?.primaryColor ?? DEFAULT_PRIMARY_COLOR
+  );
+  const [welcomeMessage, setWelcomeMessage] = useState(
+    saved?.welcomeMessage ??
+      `Hi! I'm ${defaultBotName}. How can I help you today?`
+  );
+  const [fallbackMessage, setFallbackMessage] = useState(
+    saved?.fallbackMessage ?? DEFAULT_FALLBACK
+  );
+  const [widgetPosition, setWidgetPosition] = useState<WidgetPosition>(
+    saved?.widgetPosition ?? "bottom-right"
+  );
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  /** Sync every field change to the Zustand store for real-time preview. */
+  function persistToStore(patch: Partial<CustomizationData>): void {
+    const next: CustomizationData = {
+      botName,
+      primaryColor,
+      welcomeMessage,
+      fallbackMessage,
+      widgetPosition,
+      ...patch,
+    };
+    updateOnboardingData({ customization: next });
+  }
+
+  function validate(): boolean {
+    const errs: Record<string, string> = {};
+    if (!botName.trim()) errs.botName = "Bot name is required.";
+    if (!primaryColor.trim()) errs.primaryColor = "Please choose a colour.";
+    if (!welcomeMessage.trim())
+      errs.welcomeMessage = "Welcome message is required.";
+    if (!fallbackMessage.trim())
+      errs.fallbackMessage = "Fallback message is required.";
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  function handleNext(): void {
+    if (!validate()) return;
+    persistToStore({});
+    toast.success("Customization saved!");
+    setCurrentStep(4);
+  }
+
+  return (
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      {/* ───────── FORM PANEL ───────── */}
+      <Card className="flex-1">
+        <CardHeader>
+          <CardTitle className="text-xl font-bold text-[#1E3A5F]">
+            Customize your chatbot
+          </CardTitle>
+          <CardDescription>
+            Set your bot&apos;s name, colours, and messages. See the live
+            preview on the right.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="flex flex-col gap-5">
+          {/* Bot Name */}
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="botName">Bot Name</Label>
+            <Input
+              id="botName"
+              type="text"
+              placeholder="e.g. Joe's Assistant"
+              value={botName}
+              aria-invalid={!!errors.botName}
+              onChange={(e) => {
+                setBotName(e.target.value);
+                setErrors((prev) => ({ ...prev, botName: "" }));
+                persistToStore({ botName: e.target.value });
+              }}
+            />
+            {errors.botName && (
+              <p className="text-sm text-red-600">{errors.botName}</p>
+            )}
+          </div>
+
+          {/* Primary Colour */}
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="primaryColor">Primary Colour</Label>
+            <div className="flex items-center gap-3">
+              <input
+                id="primaryColor"
+                type="color"
+                value={primaryColor}
+                onChange={(e) => {
+                  setPrimaryColor(e.target.value);
+                  persistToStore({ primaryColor: e.target.value });
+                }}
+                className="size-10 cursor-pointer rounded-md border border-slate-200 p-0.5"
+              />
+              <Input
+                type="text"
+                value={primaryColor}
+                onChange={(e) => {
+                  setPrimaryColor(e.target.value);
+                  persistToStore({ primaryColor: e.target.value });
+                }}
+                className="w-32 font-mono text-sm"
+                maxLength={7}
+              />
+            </div>
+            {errors.primaryColor && (
+              <p className="text-sm text-red-600">{errors.primaryColor}</p>
+            )}
+          </div>
+
+          {/* Welcome Message */}
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="welcomeMessage">Welcome Message</Label>
+            <Textarea
+              id="welcomeMessage"
+              placeholder="Hi! How can I help you today?"
+              value={welcomeMessage}
+              rows={3}
+              aria-invalid={!!errors.welcomeMessage}
+              onChange={(e) => {
+                setWelcomeMessage(e.target.value);
+                setErrors((prev) => ({ ...prev, welcomeMessage: "" }));
+                persistToStore({ welcomeMessage: e.target.value });
+              }}
+            />
+            {errors.welcomeMessage && (
+              <p className="text-sm text-red-600">{errors.welcomeMessage}</p>
+            )}
+          </div>
+
+          {/* Fallback Message */}
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="fallbackMessage">Fallback Message</Label>
+            <Textarea
+              id="fallbackMessage"
+              placeholder="I'm not sure about that. Please call us for more help."
+              value={fallbackMessage}
+              rows={3}
+              aria-invalid={!!errors.fallbackMessage}
+              onChange={(e) => {
+                setFallbackMessage(e.target.value);
+                setErrors((prev) => ({ ...prev, fallbackMessage: "" }));
+                persistToStore({ fallbackMessage: e.target.value });
+              }}
+            />
+            {errors.fallbackMessage && (
+              <p className="text-sm text-red-600">
+                {errors.fallbackMessage}
+              </p>
+            )}
+          </div>
+
+          {/* Widget Position */}
+          <div className="flex flex-col gap-2">
+            <Label>Widget Position</Label>
+            <div className="flex gap-3">
+              {(
+                [
+                  { value: "bottom-left", label: "Bottom Left" },
+                  { value: "bottom-right", label: "Bottom Right" },
+                ] as const
+              ).map((pos) => (
+                <button
+                  key={pos.value}
+                  type="button"
+                  onClick={() => {
+                    setWidgetPosition(pos.value);
+                    persistToStore({ widgetPosition: pos.value });
+                  }}
+                  className={cn(
+                    "flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-semibold transition-all",
+                    widgetPosition === pos.value
+                      ? "border-[#2563EB] bg-[#2563EB]/5 text-[#2563EB]"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  )}
+                >
+                  {pos.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <div className="flex items-center justify-between pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCurrentStep(2)}
+              className="h-11 border-slate-300 text-base font-semibold text-[#1E3A5F]"
+            >
+              <ArrowLeft className="size-4" />
+              Back
+            </Button>
+            <Button
+              type="button"
+              onClick={handleNext}
+              className="h-11 min-w-[140px] bg-[#2563EB] text-base font-semibold shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
+            >
+              Next →
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ───────── LIVE PREVIEW PANEL ───────── */}
+      <div className="w-full shrink-0 lg:sticky lg:top-6 lg:w-[340px]">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Live Preview
+          </p>
+          <WidgetPreview
+            botName={botName || "Assistant"}
+            primaryColor={primaryColor || DEFAULT_PRIMARY_COLOR}
+            welcomeMessage={
+              welcomeMessage || "Hi! How can I help you today?"
+            }
+            position={widgetPosition}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   WIDGET PREVIEW – static mockup of the chat widget
    ═══════════════════════════════════════════════════════════════════ */
 
 /**
- * Temporary placeholder card for steps that haven't been built yet.
- * Shows a title, description, and back/next buttons.
+ * A static visual preview of the chat widget showing the selected
+ * colour, bot name, welcome message, and position indicator.
  */
+function WidgetPreview({
+  botName,
+  primaryColor,
+  welcomeMessage,
+  position,
+}: {
+  botName: string;
+  primaryColor: string;
+  welcomeMessage: string;
+  position: WidgetPosition;
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-4">
+      {/* ── Chat panel mockup ── */}
+      <div className="overflow-hidden rounded-xl border border-slate-200 shadow-lg">
+        {/* Header */}
+        <div
+          className="flex items-center gap-3 px-4 py-3"
+          style={{ backgroundColor: primaryColor }}
+        >
+          <div className="flex size-8 items-center justify-center rounded-full bg-white/20">
+            <MessageCircle className="size-4 text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-white">{botName}</p>
+            <p className="text-xs text-white/70">Online</p>
+          </div>
+          <div className="ml-auto">
+            <X className="size-4 text-white/60" />
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div className="flex flex-col gap-3 bg-slate-50 px-4 py-4">
+          {/* Bot welcome */}
+          <div className="flex items-start gap-2">
+            <div
+              className="flex size-6 shrink-0 items-center justify-center rounded-full"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <MessageCircle className="size-3 text-white" />
+            </div>
+            <div className="max-w-[85%] rounded-lg rounded-tl-none bg-white px-3 py-2 text-xs leading-relaxed text-slate-700 shadow-sm">
+              {welcomeMessage}
+            </div>
+          </div>
+
+          {/* User sample message */}
+          <div className="flex justify-end">
+            <div
+              className="max-w-[85%] rounded-lg rounded-tr-none px-3 py-2 text-xs leading-relaxed text-white"
+              style={{ backgroundColor: primaryColor }}
+            >
+              What are your opening hours?
+            </div>
+          </div>
+
+          {/* Bot reply sample */}
+          <div className="flex items-start gap-2">
+            <div
+              className="flex size-6 shrink-0 items-center justify-center rounded-full"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <MessageCircle className="size-3 text-white" />
+            </div>
+            <div className="max-w-[85%] rounded-lg rounded-tl-none bg-white px-3 py-2 text-xs leading-relaxed text-slate-700 shadow-sm">
+              We&apos;re open Monday to Friday, 9 AM – 6 PM. Is there
+              anything else I can help with?
+            </div>
+          </div>
+        </div>
+
+        {/* Input bar */}
+        <div className="flex items-center gap-2 border-t border-slate-200 bg-white px-3 py-2.5">
+          <div className="flex-1 rounded-full bg-slate-100 px-3 py-1.5 text-xs text-slate-400">
+            Type a message…
+          </div>
+          <div
+            className="flex size-7 items-center justify-center rounded-full"
+            style={{ backgroundColor: primaryColor }}
+          >
+            <Send className="size-3 text-white" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Bubble preview ── */}
+      <div
+        className={cn(
+          "flex items-center gap-3",
+          position === "bottom-right" ? "justify-end" : "justify-start"
+        )}
+      >
+        <div
+          className="flex size-12 items-center justify-center rounded-full shadow-lg"
+          style={{ backgroundColor: primaryColor }}
+        >
+          <MessageCircle className="size-5 text-white" />
+        </div>
+        <span className="text-xs text-slate-400">
+          {position === "bottom-right" ? "↘ Bottom Right" : "↙ Bottom Left"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PLACEHOLDER STEP (Step 4 – built next)
+   ═══════════════════════════════════════════════════════════════════ */
+
 function PlaceholderStep({
   title,
   description,
@@ -656,12 +964,9 @@ function PlaceholderStep({
 }: {
   title: string;
   description: string;
-  step: 3 | 4;
+  step: 4;
 }): React.JSX.Element {
   const { setCurrentStep } = useOnboardingStore();
-
-  const previousStep = (step - 1) as 1 | 2 | 3;
-  const nextStep = step < 4 ? ((step + 1) as 2 | 3 | 4) : null;
 
   return (
     <Card>
@@ -676,21 +981,12 @@ function PlaceholderStep({
           <Button
             type="button"
             variant="outline"
-            onClick={() => setCurrentStep(previousStep)}
+            onClick={() => setCurrentStep((step - 1) as 3)}
             className="h-11 border-slate-300 text-base font-semibold text-[#1E3A5F]"
           >
             <ArrowLeft className="size-4" />
             Back
           </Button>
-          {nextStep && (
-            <Button
-              type="button"
-              onClick={() => setCurrentStep(nextStep)}
-              className="h-11 min-w-[140px] bg-[#2563EB] text-base font-semibold shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
-            >
-              Next →
-            </Button>
-          )}
         </div>
       </CardContent>
     </Card>
