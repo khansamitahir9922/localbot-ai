@@ -1,13 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod/v4";
-import { Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  FileText,
+  Globe,
+  Loader2,
+  MessageSquareText,
+  Upload,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { useOnboardingStore } from "@/store/onboarding-store";
+import {
+  useOnboardingStore,
+  type TrainingMethod,
+} from "@/store/onboarding-store";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,7 +38,49 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-/* ────────────────────────── CONSTANTS ────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════
+   ROUTER – renders the correct step based on Zustand store
+   ═══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Onboarding page.
+ *
+ * Acts as a router: reads `currentStep` from the Zustand store and
+ * renders the matching step component. All steps share the same URL
+ * (`/onboarding`) — navigation is state-driven, not URL-driven.
+ */
+export default function OnboardingPage(): React.JSX.Element {
+  const currentStep = useOnboardingStore((s) => s.currentStep);
+
+  switch (currentStep) {
+    case 1:
+      return <Step1BusinessInfo />;
+    case 2:
+      return <Step2TrainYourBot />;
+    case 3:
+      return (
+        <PlaceholderStep
+          title="Customize Your Bot"
+          description="This step is coming next."
+          step={3}
+        />
+      );
+    case 4:
+      return (
+        <PlaceholderStep
+          title="Deploy"
+          description="This step is coming next."
+          step={4}
+        />
+      );
+    default:
+      return <Step1BusinessInfo />;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   STEP 1 – BUSINESS INFO
+   ═══════════════════════════════════════════════════════════════════ */
 
 const BUSINESS_TYPES = [
   "Restaurant",
@@ -52,8 +106,6 @@ const LANGUAGES = [
   { value: "ur", label: "Urdu" },
 ] as const;
 
-/* ────────────────────────── VALIDATION ────────────────────────── */
-
 const businessInfoSchema = z.object({
   businessName: z
     .string()
@@ -69,8 +121,6 @@ const businessInfoSchema = z.object({
 
 type BusinessInfoFormValues = z.infer<typeof businessInfoSchema>;
 
-/* ──────────────────────── PAGE COMPONENT ──────────────────────── */
-
 /**
  * Onboarding Step 1 – Business Info.
  *
@@ -78,11 +128,10 @@ type BusinessInfoFormValues = z.infer<typeof businessInfoSchema>;
  * language. On submit it creates a new row in the `workspaces` table
  * and advances the wizard to Step 2.
  */
-export default function OnboardingStep1Page(): React.JSX.Element {
+function Step1BusinessInfo(): React.JSX.Element {
   const [userId, setUserId] = useState<string | null>(null);
   const { setCurrentStep, updateOnboardingData } = useOnboardingStore();
 
-  /* Fetch the authenticated user's ID on mount. */
   useEffect(() => {
     async function fetchUser(): Promise<void> {
       const supabase = createClient();
@@ -111,7 +160,6 @@ export default function OnboardingStep1Page(): React.JSX.Element {
     },
   });
 
-  /** Insert a workspace row and advance to Step 2. */
   async function onSubmit(values: BusinessInfoFormValues): Promise<void> {
     if (!userId) {
       toast.error("Unable to identify your account. Please sign in again.");
@@ -139,8 +187,6 @@ export default function OnboardingStep1Page(): React.JSX.Element {
       return;
     }
 
-    /* Persist collected data in the Zustand store so later steps can
-       reference the workspace ID and business details. */
     updateOnboardingData({
       workspaceId: data.id,
       businessName: values.businessName,
@@ -298,6 +344,354 @@ export default function OnboardingStep1Page(): React.JSX.Element {
             </Button>
           </div>
         </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   STEP 2 – TRAIN YOUR BOT
+   ═══════════════════════════════════════════════════════════════════ */
+
+const MAX_FILE_SIZE_MB = 10;
+const ACCEPTED_FILE_TYPES = ".pdf,.docx";
+
+/** Training method option metadata. */
+const TRAINING_OPTIONS: {
+  method: TrainingMethod;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}[] = [
+  {
+    method: "website",
+    icon: <Globe className="size-6 text-[#2563EB]" />,
+    title: "Paste Your Website URL",
+    description:
+      "We'll crawl your website and extract FAQs, services, and business info automatically.",
+  },
+  {
+    method: "manual",
+    icon: <MessageSquareText className="size-6 text-[#2563EB]" />,
+    title: "Answer Questions Manually",
+    description:
+      "We'll generate questions based on your business type. You answer them, and the bot learns.",
+  },
+  {
+    method: "document",
+    icon: <FileText className="size-6 text-[#2563EB]" />,
+    title: "Upload a Document",
+    description:
+      "Upload a PDF or DOCX with your FAQs, menu, services list, or any business info.",
+  },
+];
+
+/**
+ * Onboarding Step 2 – Train Your Bot.
+ *
+ * Lets the user choose how they want to train their chatbot:
+ * 1. Website URL (crawl)
+ * 2. Manual Q&A
+ * 3. Document upload
+ *
+ * Selection and supporting inputs are stored in the Zustand onboarding
+ * store. On "Next", the wizard advances to Step 3.
+ */
+function Step2TrainYourBot(): React.JSX.Element {
+  const { setCurrentStep, onboardingData, updateOnboardingData } =
+    useOnboardingStore();
+
+  const [selectedMethod, setSelectedMethod] = useState<TrainingMethod | null>(
+    onboardingData.trainingMethod ?? null
+  );
+  const [websiteUrl, setWebsiteUrl] = useState(
+    onboardingData.trainingWebsiteUrl ?? ""
+  );
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState(
+    onboardingData.documentFileName ?? ""
+  );
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /** Select a training method and clear irrelevant inputs. */
+  function handleSelectMethod(method: TrainingMethod): void {
+    setSelectedMethod(method);
+    setUrlError(null);
+
+    if (method !== "website") {
+      setWebsiteUrl("");
+    }
+    if (method !== "document") {
+      setSelectedFile(null);
+      setFileName("");
+    }
+  }
+
+  /** Handle file selection with size + type validation. */
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): void {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      toast.error(`File must be smaller than ${MAX_FILE_SIZE_MB}MB.`);
+      e.target.value = "";
+      return;
+    }
+
+    setSelectedFile(file);
+    setFileName(file.name);
+  }
+
+  /** Remove the selected file. */
+  function handleRemoveFile(): void {
+    setSelectedFile(null);
+    setFileName("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  /** Validate and advance to Step 3. */
+  function handleNext(): void {
+    if (!selectedMethod) {
+      toast.error("Please select a training method.");
+      return;
+    }
+
+    if (selectedMethod === "website") {
+      if (!websiteUrl.trim()) {
+        setUrlError("Please enter your website URL.");
+        return;
+      }
+      try {
+        new URL(websiteUrl);
+        setUrlError(null);
+      } catch {
+        setUrlError("Please enter a valid URL (e.g. https://example.com).");
+        return;
+      }
+    }
+
+    /* Persist selections in the Zustand store. */
+    updateOnboardingData({
+      trainingMethod: selectedMethod,
+      trainingWebsiteUrl:
+        selectedMethod === "website" ? websiteUrl : undefined,
+      documentFileName:
+        selectedMethod === "document" ? fileName : undefined,
+    });
+
+    toast.success("Training method saved!");
+    setCurrentStep(3);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xl font-bold text-[#1E3A5F]">
+          How would you like to train your chatbot?
+        </CardTitle>
+        <CardDescription>
+          Choose a method below. You can always add more data later from
+          your dashboard.
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="flex flex-col gap-6">
+        {/* ── Method cards ── */}
+        <div className="flex flex-col gap-4">
+          {TRAINING_OPTIONS.map((option) => {
+            const isSelected = selectedMethod === option.method;
+
+            return (
+              <button
+                key={option.method}
+                type="button"
+                onClick={() => handleSelectMethod(option.method)}
+                className={cn(
+                  "flex items-start gap-4 rounded-xl border-2 p-4 text-left transition-all sm:p-5",
+                  isSelected
+                    ? "border-[#2563EB] bg-[#2563EB]/5 shadow-sm"
+                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                )}
+              >
+                <div
+                  className={cn(
+                    "flex size-11 shrink-0 items-center justify-center rounded-lg",
+                    isSelected ? "bg-[#2563EB]/10" : "bg-slate-100"
+                  )}
+                >
+                  {option.icon}
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span
+                    className={cn(
+                      "text-base font-semibold",
+                      isSelected ? "text-[#2563EB]" : "text-[#1E3A5F]"
+                    )}
+                  >
+                    {option.title}
+                  </span>
+                  <span className="text-sm leading-relaxed text-slate-500">
+                    {option.description}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Conditional inputs based on selected method ── */}
+
+        {/* Website URL input */}
+        {selectedMethod === "website" && (
+          <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4">
+            <Label htmlFor="trainingUrl">Website URL</Label>
+            <Input
+              id="trainingUrl"
+              type="url"
+              placeholder="https://www.yourbusiness.com"
+              value={websiteUrl}
+              onChange={(e) => {
+                setWebsiteUrl(e.target.value);
+                setUrlError(null);
+              }}
+              aria-invalid={!!urlError}
+            />
+            {urlError && (
+              <p className="text-sm text-red-600">{urlError}</p>
+            )}
+            <p className="text-xs text-slate-400">
+              We&apos;ll crawl your site to extract FAQs and business info.
+            </p>
+          </div>
+        )}
+
+        {/* Document upload input */}
+        {selectedMethod === "document" && (
+          <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
+            <Label>Upload Document</Label>
+
+            {fileName ? (
+              <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <FileText className="size-5 text-[#2563EB]" />
+                  <span className="text-sm font-medium text-[#1E3A5F]">
+                    {fileName}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                  aria-label="Remove file"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center transition-colors hover:border-[#2563EB]/40 hover:bg-[#2563EB]/5"
+              >
+                <Upload className="size-8 text-slate-400" />
+                <span className="text-sm font-medium text-slate-600">
+                  Click to upload a file
+                </span>
+                <span className="text-xs text-slate-400">
+                  PDF or DOCX, max {MAX_FILE_SIZE_MB}MB
+                </span>
+              </button>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_FILE_TYPES}
+              onChange={handleFileChange}
+              className="hidden"
+            />
+          </div>
+        )}
+
+        {/* ── Navigation buttons ── */}
+        <div className="flex items-center justify-between pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCurrentStep(1)}
+            className="h-11 border-slate-300 text-base font-semibold text-[#1E3A5F]"
+          >
+            <ArrowLeft className="size-4" />
+            Back
+          </Button>
+          <Button
+            type="button"
+            onClick={handleNext}
+            disabled={!selectedMethod}
+            className="h-11 min-w-[140px] bg-[#2563EB] text-base font-semibold shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
+          >
+            Next →
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PLACEHOLDER STEP (for Steps 3 & 4 – built later)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Temporary placeholder card for steps that haven't been built yet.
+ * Shows a title, description, and back/next buttons.
+ */
+function PlaceholderStep({
+  title,
+  description,
+  step,
+}: {
+  title: string;
+  description: string;
+  step: 3 | 4;
+}): React.JSX.Element {
+  const { setCurrentStep } = useOnboardingStore();
+
+  const previousStep = (step - 1) as 1 | 2 | 3;
+  const nextStep = step < 4 ? ((step + 1) as 2 | 3 | 4) : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xl font-bold text-[#1E3A5F]">
+          {title}
+        </CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCurrentStep(previousStep)}
+            className="h-11 border-slate-300 text-base font-semibold text-[#1E3A5F]"
+          >
+            <ArrowLeft className="size-4" />
+            Back
+          </Button>
+          {nextStep && (
+            <Button
+              type="button"
+              onClick={() => setCurrentStep(nextStep)}
+              className="h-11 min-w-[140px] bg-[#2563EB] text-base font-semibold shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
+            >
+              Next →
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

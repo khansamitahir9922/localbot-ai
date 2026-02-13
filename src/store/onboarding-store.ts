@@ -19,12 +19,14 @@ export const ONBOARDING_STEPS: StepMeta[] = [
   { number: 4, label: "Deploy" },
 ];
 
+/** Training method chosen in Step 2. */
+export type TrainingMethod = "website" | "manual" | "document";
+
 /** Accumulated data collected across all onboarding steps. */
 export interface OnboardingData {
+  /* ── Step 1 ── */
   /** UUID of the workspace created in Step 1. */
   workspaceId?: string;
-  /** UUID of the chatbot created in Step 2. */
-  chatbotId?: string;
   /** Business name entered in Step 1. */
   businessName?: string;
   /** Business type selected in Step 1. */
@@ -33,6 +35,18 @@ export interface OnboardingData {
   websiteUrl?: string;
   /** Language selected in Step 1. */
   language?: string;
+
+  /* ── Step 2 ── */
+  /** How the user chose to train the chatbot. */
+  trainingMethod?: TrainingMethod | null;
+  /** URL provided when training method is "website". */
+  trainingWebsiteUrl?: string;
+  /** Name of the uploaded file when training method is "document". */
+  documentFileName?: string;
+
+  /* ── Step 3 / 4 ── */
+  /** UUID of the chatbot created during onboarding. */
+  chatbotId?: string;
 }
 
 /** Shape of the Zustand onboarding store. */
