@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/middleware";
  * Routes that require authentication. Any request whose pathname starts
  * with one of these prefixes will be checked for a valid Supabase session.
  */
-const PROTECTED_ROUTES: string[] = ["/dashboard"];
+const PROTECTED_ROUTES: string[] = ["/dashboard", "/onboarding"];
 
 /**
  * Where unauthenticated users are sent when they try to access a protected route.
