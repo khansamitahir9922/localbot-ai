@@ -14,6 +14,10 @@ import {
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { getTemplatesForBusinessType } from "@/lib/qa-templates";
+import {
+  generateAndStoreEmbedding,
+  generateEmbeddingsBatch,
+} from "@/lib/openai/embeddings";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -222,21 +226,43 @@ export default function KnowledgeBasePage(): React.JSX.Element {
       }
 
       toast.success("Q&A pair updated!");
+
+      /* Re-generate embedding in the background (question/answer changed) */
+      generateAndStoreEmbedding(
+        editingPair.id,
+        question.trim(),
+        answer.trim()
+      ).catch(() => {
+        /* non-blocking – already logged inside the helper */
+      });
     } else {
       /* ── Insert new pair ── */
-      const { error } = await supabase.from("qa_pairs").insert({
-        chatbot_id: ctx.chatbotId,
-        question: question.trim(),
-        answer: answer.trim(),
-      });
+      const { data: inserted, error } = await supabase
+        .from("qa_pairs")
+        .insert({
+          chatbot_id: ctx.chatbotId,
+          question: question.trim(),
+          answer: answer.trim(),
+        })
+        .select("id")
+        .single();
 
-      if (error) {
-        toast.error(error.message || "Failed to add Q&A pair.");
+      if (error || !inserted) {
+        toast.error(error?.message || "Failed to add Q&A pair.");
         setIsSaving(false);
         return;
       }
 
       toast.success("Q&A pair added!");
+
+      /* Generate embedding in the background */
+      generateAndStoreEmbedding(
+        inserted.id as string,
+        question.trim(),
+        answer.trim()
+      ).catch(() => {
+        /* non-blocking */
+      });
     }
 
     setIsSaving(false);
@@ -319,18 +345,32 @@ export default function KnowledgeBasePage(): React.JSX.Element {
       answer: t.answer,
     }));
 
-    const { error } = await supabase.from("qa_pairs").insert(rows);
+    const { data: inserted, error } = await supabase
+      .from("qa_pairs")
+      .insert(rows)
+      .select("id, question, answer");
 
-    if (error) {
-      toast.error(error.message || "Failed to add templates.");
+    if (error || !inserted) {
+      toast.error(error?.message || "Failed to add templates.");
       setIsLoadingTemplates(false);
       return;
     }
 
-    toast.success(`Added ${selected.length} Q&A pairs from templates!`);
+    toast.success(`Added ${inserted.length} Q&A pairs from templates!`);
     setIsLoadingTemplates(false);
     setTemplateDialogOpen(false);
     await loadData();
+
+    /* Generate embeddings for all inserted templates in the background */
+    generateEmbeddingsBatch(
+      inserted.map((row) => ({
+        id: row.id as string,
+        question: row.question as string,
+        answer: row.answer as string,
+      }))
+    ).catch(() => {
+      /* non-blocking – already handled inside the helper */
+    });
   }
 
   /* ── Loading state ── */
