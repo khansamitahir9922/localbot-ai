@@ -8,6 +8,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Sparkles,
   Trash2,
@@ -67,18 +68,23 @@ interface PageContext {
 /* ────────────────────────── EMBEDDING HELPER ────────────────────────── */
 
 /**
- * Silently generate an embedding for a Q&A pair and store it in Supabase.
+ * Silently generate an embedding for a Q&A pair, store it in Supabase,
+ * and upsert the vector to Pinecone for semantic search.
  *
- * - POSTs to /api/embeddings (returns mock data when SKIP_EMBEDDINGS=true).
+ * - POSTs to /api/embeddings to get the vector.
  * - Updates the `embedding` column on the matching qa_pairs row.
+ * - POSTs to /api/pinecone/upsert to sync the vector for search.
  * - Never shows toasts — only logs errors to the console.
  * - Designed to be fire-and-forget; never throws.
  */
 async function generateEmbedding(
   qaPairId: string,
-  questionText: string
+  chatbotId: string,
+  questionText: string,
+  answerText: string
 ): Promise<void> {
   try {
+    /* ── 1. Generate embedding via OpenAI ── */
     const res = await fetch("/api/embeddings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -99,6 +105,7 @@ async function generateEmbedding(
       return;
     }
 
+    /* ── 2. Store embedding in Supabase ── */
     const supabase = createClient();
     const { error } = await supabase
       .from("qa_pairs")
@@ -109,6 +116,28 @@ async function generateEmbedding(
       console.error(
         `[embeddings] Supabase update failed for pair ${qaPairId}:`,
         error.message
+      );
+    }
+
+    /* ── 3. Upsert vector to Pinecone ── */
+    try {
+      await fetch("/api/pinecone/upsert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: qaPairId,
+          vector: data.embedding,
+          metadata: {
+            chatbot_id: chatbotId,
+            question: questionText,
+            answer: answerText,
+          },
+        }),
+      });
+    } catch (pineconeErr) {
+      console.error(
+        `[pinecone] Upsert failed for pair ${qaPairId}:`,
+        pineconeErr
       );
     }
   } catch (err) {
@@ -154,6 +183,9 @@ export default function KnowledgeBasePage(): React.JSX.Element {
   >([]);
   const [crawlPagesScraped, setCrawlPagesScraped] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
+
+  /* ── Pinecone sync state ── */
+  const [isSyncing, setIsSyncing] = useState(false);
 
   /* ── Fetch chatbot + Q&A pairs ── */
   const loadData = useCallback(async (): Promise<void> => {
@@ -281,7 +313,7 @@ export default function KnowledgeBasePage(): React.JSX.Element {
       toast.success("Q&A pair updated!");
 
       /* Re-generate embedding silently in the background */
-      generateEmbedding(editingPair.id, question.trim());
+      generateEmbedding(editingPair.id, ctx.chatbotId, question.trim(), answer.trim());
     } else {
       /* ── Insert new pair ── */
       const { data: inserted, error } = await supabase
@@ -303,7 +335,7 @@ export default function KnowledgeBasePage(): React.JSX.Element {
       toast.success("Q&A pair added!");
 
       /* Generate embedding silently in the background */
-      generateEmbedding(inserted.id as string, question.trim());
+      generateEmbedding(inserted.id as string, ctx.chatbotId, question.trim(), answer.trim());
     }
 
     setIsSaving(false);
@@ -402,12 +434,63 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     setTemplateDialogOpen(false);
     await loadData();
 
-    /* Generate embeddings for all inserted templates silently in parallel */
+    /* Generate embeddings + Pinecone sync for all templates in parallel */
     Promise.allSettled(
       inserted.map((row) =>
-        generateEmbedding(row.id as string, row.question as string)
+        generateEmbedding(
+          row.id as string,
+          ctx.chatbotId,
+          row.question as string,
+          row.answer as string
+        )
       )
     );
+  }
+
+  /** Sync all Q&A pairs (with embeddings) to Pinecone. */
+  async function handleSyncToPinecone(): Promise<void> {
+    if (!ctx?.chatbotId) return;
+
+    setIsSyncing(true);
+
+    try {
+      const res = await fetch("/api/pinecone/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatbotId: ctx.chatbotId }),
+      });
+
+      const data = (await res.json()) as {
+        synced?: number;
+        failed?: number;
+        total?: number;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        toast.error(data.error || "Sync failed.");
+        setIsSyncing(false);
+        return;
+      }
+
+      if ((data.total ?? 0) === 0) {
+        toast.info(
+          "No Q&A pairs with embeddings to sync. Add some Q&As first."
+        );
+      } else if ((data.failed ?? 0) === 0) {
+        toast.success(
+          `Synced ${data.synced} Q&A pair${data.synced !== 1 ? "s" : ""} to Pinecone!`
+        );
+      } else {
+        toast.warning(
+          `Synced ${data.synced} of ${data.total}. ${data.failed} failed — try again later.`
+        );
+      }
+    } catch {
+      toast.error("Network error during sync. Please try again.");
+    } finally {
+      setIsSyncing(false);
+    }
   }
 
   /* ── Open crawl dialog ── */
@@ -515,10 +598,15 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     setCrawlDialogOpen(false);
     await loadData();
 
-    /* Generate embeddings silently in the background */
+    /* Generate embeddings + Pinecone sync in the background */
     Promise.allSettled(
       inserted.map((row) =>
-        generateEmbedding(row.id as string, row.question as string)
+        generateEmbedding(
+          row.id as string,
+          ctx.chatbotId,
+          row.question as string,
+          row.answer as string
+        )
       )
     );
   }
@@ -584,6 +672,26 @@ export default function KnowledgeBasePage(): React.JSX.Element {
             <Globe className="size-4" />
             Import from URL
           </Button>
+          {pairs.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={handleSyncToPinecone}
+              disabled={isSyncing}
+              className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+            >
+              {isSyncing ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Syncing…
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="size-4" />
+                  Sync to Pinecone
+                </>
+              )}
+            </Button>
+          )}
           <Button
             onClick={handleOpenAdd}
             className="bg-[#2563EB] shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
