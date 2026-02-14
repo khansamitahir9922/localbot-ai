@@ -984,6 +984,7 @@ function Step4Deploy(): React.JSX.Element {
   );
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [emailBodyCopied, setEmailBodyCopied] = useState(false);
   const creationAttempted = useRef(false);
 
   /* ── Create chatbot row on first mount ── */
@@ -1145,15 +1146,34 @@ function Step4Deploy(): React.JSX.Element {
     }
   }
 
-  /** Open the user's email client with the embed code pre-filled. */
-  function handleEmailToDeveloper(): void {
-    const subject = encodeURIComponent(
-      `Add the ${onboardingData.businessName ?? "LocalBot AI"} chatbot to our website`
-    );
-    const body = encodeURIComponent(
-      `Hi,\n\nPlease add our AI chatbot to the website. Here is the embed code — paste it just before the closing </body> tag on every page:\n\n${embedSnippet}\n\nYou can also test it first by visiting:\n${chatPageUrl}\n\nThanks!`
-    );
-    window.open(`mailto:?subject=${subject}&body=${body}`, "_self");
+  /** Email subject and body for the developer email. */
+  const emailSubject = `Add the ${onboardingData.businessName ?? "LocalBot AI"} chatbot to our website`;
+  const emailBody = `Hi,\n\nPlease add our AI chatbot to the website. Here is the embed code — paste it just before the closing </body> tag on every page:\n\n${embedSnippet}\n\nYou can also test it first by visiting:\n${chatPageUrl}\n\nThanks!`;
+
+  /** Open Gmail compose with the embed instructions pre-filled. */
+  function handleEmailGmail(): void {
+    const url = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+    window.open(url, "_blank");
+  }
+
+  /** Open Outlook web compose with the embed instructions pre-filled. */
+  function handleEmailOutlook(): void {
+    const url = `https://outlook.live.com/mail/0/deeplink/compose?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+    window.open(url, "_blank");
+  }
+
+  /** Copy the full email text so the user can paste it anywhere. */
+  async function handleCopyEmailBody(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(
+        `Subject: ${emailSubject}\n\n${emailBody}`
+      );
+      setEmailBodyCopied(true);
+      toast.success("Email content copied! Paste it into any email app.");
+      setTimeout(() => setEmailBodyCopied(false), 2500);
+    } catch {
+      toast.error("Failed to copy. Please try again.");
+    }
   }
 
   /* ── Success state – show embed code ── */
@@ -1243,19 +1263,52 @@ function Step4Deploy(): React.JSX.Element {
               </h4>
             </div>
             <p className="mb-3 text-sm text-slate-500">
-              Don&apos;t want to touch code? Click the button below and
-              we&apos;ll open an email with all the instructions your web
-              developer (or tech-savvy friend) needs.
+              Don&apos;t want to touch code? Pick your email app below
+              and we&apos;ll write the email for you — just add your
+              developer&apos;s address and hit send.
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleEmailToDeveloper}
-              className="border-[#2563EB]/30 text-[#2563EB] hover:bg-[#2563EB]/5"
-            >
-              <Mail className="size-4" />
-              Email Instructions to Developer
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleEmailGmail}
+                className="border-[#2563EB]/30 text-[#2563EB] hover:bg-[#2563EB]/5"
+              >
+                <Mail className="size-4" />
+                Open in Gmail
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleEmailOutlook}
+                className="border-[#2563EB]/30 text-[#2563EB] hover:bg-[#2563EB]/5"
+              >
+                <Mail className="size-4" />
+                Open in Outlook
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCopyEmailBody}
+                className="border-slate-300 text-slate-600 hover:bg-slate-100"
+              >
+                {emailBodyCopied ? (
+                  <>
+                    <Check className="size-4" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <ClipboardCopy className="size-4" />
+                    Copy Email Text
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              &quot;Copy Email Text&quot; lets you paste the instructions
+              into any email app (Yahoo, iCloud, etc.).
+            </p>
           </div>
 
           {/* QR Code placeholder */}
