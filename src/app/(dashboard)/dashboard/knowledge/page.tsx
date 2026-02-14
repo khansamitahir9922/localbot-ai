@@ -3,14 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   BookOpen,
+  Check,
   Loader2,
   Pencil,
   Plus,
   Search,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { getTemplatesForBusinessType } from "@/lib/qa-templates";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +66,7 @@ interface QaPair {
 interface PageContext {
   chatbotId: string;
   workspaceId: string;
+  businessType: string;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -87,6 +91,13 @@ export default function KnowledgeBasePage(): React.JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<QaPair | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  /* ── Template dialog state ── */
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [templatePreviews, setTemplatePreviews] = useState<
+    { question: string; answer: string; selected: boolean }[]
+  >([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+
   /* ── Fetch chatbot + Q&A pairs ── */
   const loadData = useCallback(async (): Promise<void> => {
     const supabase = createClient();
@@ -103,7 +114,7 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     /* Get the user's first workspace */
     const { data: workspaces } = await supabase
       .from("workspaces")
-      .select("id")
+      .select("id, business_type")
       .eq("user_id", user.id)
       .limit(1);
 
@@ -113,6 +124,7 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     }
 
     const workspaceId = workspaces[0].id as string;
+    const businessType = (workspaces[0].business_type as string) ?? "other";
 
     /* Get the first chatbot in the workspace */
     const { data: chatbots } = await supabase
@@ -123,13 +135,13 @@ export default function KnowledgeBasePage(): React.JSX.Element {
       .limit(1);
 
     if (!chatbots || chatbots.length === 0) {
-      setCtx({ chatbotId: "", workspaceId });
+      setCtx({ chatbotId: "", workspaceId, businessType });
       setIsLoading(false);
       return;
     }
 
     const chatbotId = chatbots[0].id as string;
-    setCtx({ chatbotId, workspaceId });
+    setCtx({ chatbotId, workspaceId, businessType });
 
     /* Fetch all Q&A pairs for this chatbot */
     const { data: qaPairs, error } = await supabase
@@ -259,6 +271,68 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     await loadData();
   }
 
+  /* ── Open template dialog ── */
+  function handleOpenTemplates(): void {
+    if (!ctx) return;
+    const templates = getTemplatesForBusinessType(ctx.businessType);
+
+    /* Mark templates that already exist in the list as de-selected */
+    const existingQuestions = new Set(
+      pairs.map((p) => p.question.toLowerCase().trim())
+    );
+
+    setTemplatePreviews(
+      templates.map((t) => ({
+        question: t.question,
+        answer: t.answer,
+        selected: !existingQuestions.has(t.question.toLowerCase().trim()),
+      }))
+    );
+    setTemplateDialogOpen(true);
+  }
+
+  /** Toggle a single template's selection. */
+  function toggleTemplate(index: number): void {
+    setTemplatePreviews((prev) =>
+      prev.map((t, i) =>
+        i === index ? { ...t, selected: !t.selected } : t
+      )
+    );
+  }
+
+  /** Bulk-insert selected templates. */
+  async function handleInsertTemplates(): Promise<void> {
+    if (!ctx?.chatbotId) return;
+
+    const selected = templatePreviews.filter((t) => t.selected);
+    if (selected.length === 0) {
+      toast.error("Please select at least one template.");
+      return;
+    }
+
+    setIsLoadingTemplates(true);
+    const supabase = createClient();
+
+    const rows = selected.map((t) => ({
+      chatbot_id: ctx.chatbotId,
+      question: t.question,
+      answer: t.answer,
+    }));
+
+    const { error } = await supabase.from("qa_pairs").insert(rows);
+
+    if (error) {
+      toast.error(error.message || "Failed to add templates.");
+      setIsLoadingTemplates(false);
+      return;
+    }
+
+    toast.success(`Added ${selected.length} Q&A pairs from templates!`);
+    setIsLoadingTemplates(false);
+    setTemplateDialogOpen(false);
+    await loadData();
+  }
+
   /* ── Loading state ── */
   if (isLoading) {
     return (
@@ -303,13 +377,23 @@ export default function KnowledgeBasePage(): React.JSX.Element {
             )}
           </p>
         </div>
-        <Button
-          onClick={handleOpenAdd}
-          className="shrink-0 bg-[#2563EB] shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
-        >
-          <Plus className="size-4" />
-          Add New Q&A
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <Button
+            variant="outline"
+            onClick={handleOpenTemplates}
+            className="border-[#2563EB]/30 text-[#2563EB] hover:bg-[#2563EB]/5"
+          >
+            <Sparkles className="size-4" />
+            Load Templates
+          </Button>
+          <Button
+            onClick={handleOpenAdd}
+            className="bg-[#2563EB] shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
+          >
+            <Plus className="size-4" />
+            Add New Q&A
+          </Button>
+        </div>
       </div>
 
       {/* ──── Search (show when there are items) ──── */}
@@ -338,17 +422,28 @@ export default function KnowledgeBasePage(): React.JSX.Element {
                 No Q&A pairs yet
               </h3>
               <p className="mt-1 max-w-sm text-sm text-slate-500">
-                Add your first question and answer so your chatbot knows
-                how to help your customers.
+                Add your first question and answer, or load pre-written
+                templates based on your business type to get started
+                quickly.
               </p>
             </div>
-            <Button
-              onClick={handleOpenAdd}
-              className="bg-[#2563EB] shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
-            >
-              <Plus className="size-4" />
-              Add Your First Q&A
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={handleOpenTemplates}
+                className="border-[#2563EB]/30 text-[#2563EB] hover:bg-[#2563EB]/5"
+              >
+                <Sparkles className="size-4" />
+                Load Templates
+              </Button>
+              <Button
+                onClick={handleOpenAdd}
+                className="bg-[#2563EB] shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
+              >
+                <Plus className="size-4" />
+                Add Q&A Manually
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -531,6 +626,117 @@ export default function KnowledgeBasePage(): React.JSX.Element {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ──── Template Picker Dialog ──── */}
+      <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+        <DialogContent className="max-h-[85vh] sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#1E3A5F]">
+              <Sparkles className="size-5 text-[#2563EB]" />
+              Load Q&A Templates
+            </DialogTitle>
+            <DialogDescription>
+              Pre-written questions and answers for your{" "}
+              <strong className="text-slate-700">
+                {ctx?.businessType ?? "business"}
+              </strong>{" "}
+              business. Select the ones you want to add, then edit them
+              later to match your actual details.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Select/deselect all */}
+          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <p className="text-sm text-slate-500">
+              {templatePreviews.filter((t) => t.selected).length} of{" "}
+              {templatePreviews.length} selected
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                const allSelected = templatePreviews.every(
+                  (t) => t.selected
+                );
+                setTemplatePreviews((prev) =>
+                  prev.map((t) => ({ ...t, selected: !allSelected }))
+                );
+              }}
+              className="text-sm font-medium text-[#2563EB] hover:underline"
+            >
+              {templatePreviews.every((t) => t.selected)
+                ? "Deselect All"
+                : "Select All"}
+            </button>
+          </div>
+
+          {/* Template list */}
+          <div className="flex max-h-[50vh] flex-col gap-2 overflow-y-auto pr-1">
+            {templatePreviews.map((tmpl, index) => (
+              <button
+                key={index}
+                type="button"
+                onClick={() => toggleTemplate(index)}
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-3 text-left transition-all",
+                  tmpl.selected
+                    ? "border-[#2563EB] bg-[#2563EB]/5"
+                    : "border-slate-200 bg-white hover:bg-slate-50"
+                )}
+              >
+                <div
+                  className={cn(
+                    "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border-2 transition-colors",
+                    tmpl.selected
+                      ? "border-[#2563EB] bg-[#2563EB] text-white"
+                      : "border-slate-300"
+                  )}
+                >
+                  {tmpl.selected && <Check className="size-3" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#1E3A5F]">
+                    {tmpl.question}
+                  </p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                    {tmpl.answer}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTemplateDialogOpen(false)}
+              disabled={isLoadingTemplates}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleInsertTemplates}
+              disabled={
+                isLoadingTemplates ||
+                templatePreviews.filter((t) => t.selected).length === 0
+              }
+              className="bg-[#2563EB] hover:bg-[#1d4ed8]"
+            >
+              {isLoadingTemplates ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Adding…
+                </>
+              ) : (
+                <>
+                  <Plus className="size-4" />
+                  Add {templatePreviews.filter((t) => t.selected).length}{" "}
+                  Q&A Pairs
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
