@@ -7,10 +7,6 @@ import OpenAI from "openai";
    Returns: { embedding: number[] }
    ───────────────────────────────────────────────────────────── */
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 /** The model we use for all Q&A embeddings. */
 const EMBEDDING_MODEL = "text-embedding-3-small";
 
@@ -64,6 +60,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       : question.trim();
 
     /* ── Call OpenAI Embeddings API ── */
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
     const response = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
       input: textToEmbed,

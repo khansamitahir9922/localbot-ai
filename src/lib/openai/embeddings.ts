@@ -7,23 +7,15 @@
  * block the main CRUD flow.
  *
  * ─── DEV MODE ───
- * Set NEXT_PUBLIC_SKIP_EMBEDDINGS=true in .env.local to silently
- * skip all embedding generation (useful during UI development when
- * you don't have OpenAI credits yet). Remove it or set to "false"
- * when you're ready to enable the chatbot brain (Week 5+).
+ * When NEXT_PUBLIC_SKIP_EMBEDDINGS=true in .env.local, the API
+ * route returns a mock embedding (1536 zeros) instead of calling
+ * OpenAI. This lets the full flow work without credits during UI
+ * development. Remove the flag when you're ready for real
+ * embeddings (Week 5+).
  */
 
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-
-/* ────────────────────────── Config ────────────────────────── */
-
-/**
- * When `true`, all embedding functions return immediately without
- * making any API calls. Errors are silenced completely.
- */
-const SKIP_EMBEDDINGS =
-  process.env.NEXT_PUBLIC_SKIP_EMBEDDINGS === "true";
 
 /* ────────────────────────── Types ────────────────────────── */
 
@@ -47,8 +39,6 @@ export async function fetchEmbedding(
   question: string,
   answer?: string
 ): Promise<number[] | null> {
-  if (SKIP_EMBEDDINGS) return null;
-
   try {
     const res = await fetch("/api/embeddings", {
       method: "POST",
@@ -84,8 +74,6 @@ export async function generateAndStoreEmbedding(
   question: string,
   answer: string
 ): Promise<boolean> {
-  if (SKIP_EMBEDDINGS) return false;
-
   const embedding = await fetchEmbedding(question, answer);
   if (!embedding) return false;
 
@@ -119,7 +107,7 @@ export async function generateEmbeddingsBatch(
   pairs: { id: string; question: string; answer: string }[],
   showToast = true
 ): Promise<void> {
-  if (SKIP_EMBEDDINGS || pairs.length === 0) return;
+  if (pairs.length === 0) return;
 
   const results: GenerateResult[] = await Promise.all(
     pairs.map(async (p) => ({

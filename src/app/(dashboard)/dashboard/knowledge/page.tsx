@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   BookOpen,
   Check,
+  Globe,
   Loader2,
   Pencil,
   Plus,
@@ -14,22 +15,12 @@ import {
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { getTemplatesForBusinessType } from "@/lib/qa-templates";
-import {
-  generateAndStoreEmbedding,
-  generateEmbeddingsBatch,
-} from "@/lib/openai/embeddings";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -73,6 +64,58 @@ interface PageContext {
   businessType: string;
 }
 
+/* ────────────────────────── EMBEDDING HELPER ────────────────────────── */
+
+/**
+ * Silently generate an embedding for a Q&A pair and store it in Supabase.
+ *
+ * - POSTs to /api/embeddings (returns mock data when SKIP_EMBEDDINGS=true).
+ * - Updates the `embedding` column on the matching qa_pairs row.
+ * - Never shows toasts — only logs errors to the console.
+ * - Designed to be fire-and-forget; never throws.
+ */
+async function generateEmbedding(
+  qaPairId: string,
+  questionText: string
+): Promise<void> {
+  try {
+    const res = await fetch("/api/embeddings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: questionText }),
+    });
+
+    if (!res.ok) {
+      console.error(
+        `[embeddings] API returned ${res.status} for pair ${qaPairId}`
+      );
+      return;
+    }
+
+    const data = (await res.json()) as { embedding?: number[] };
+
+    if (!data.embedding) {
+      console.error(`[embeddings] No embedding returned for pair ${qaPairId}`);
+      return;
+    }
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("qa_pairs")
+      .update({ embedding: data.embedding })
+      .eq("id", qaPairId);
+
+    if (error) {
+      console.error(
+        `[embeddings] Supabase update failed for pair ${qaPairId}:`,
+        error.message
+      );
+    }
+  } catch (err) {
+    console.error(`[embeddings] Unexpected error for pair ${qaPairId}:`, err);
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    KNOWLEDGE BASE PAGE
    ═══════════════════════════════════════════════════════════════════ */
@@ -101,6 +144,16 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     { question: string; answer: string; selected: boolean }[]
   >([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+
+  /* ── Crawl / Import from URL dialog state ── */
+  const [crawlDialogOpen, setCrawlDialogOpen] = useState(false);
+  const [crawlUrl, setCrawlUrl] = useState("");
+  const [isCrawling, setIsCrawling] = useState(false);
+  const [crawlResults, setCrawlResults] = useState<
+    { question: string; answer: string; selected: boolean }[]
+  >([]);
+  const [crawlPagesScraped, setCrawlPagesScraped] = useState(0);
+  const [isImporting, setIsImporting] = useState(false);
 
   /* ── Fetch chatbot + Q&A pairs ── */
   const loadData = useCallback(async (): Promise<void> => {
@@ -227,14 +280,8 @@ export default function KnowledgeBasePage(): React.JSX.Element {
 
       toast.success("Q&A pair updated!");
 
-      /* Re-generate embedding in the background (question/answer changed) */
-      generateAndStoreEmbedding(
-        editingPair.id,
-        question.trim(),
-        answer.trim()
-      ).catch(() => {
-        /* non-blocking – already logged inside the helper */
-      });
+      /* Re-generate embedding silently in the background */
+      generateEmbedding(editingPair.id, question.trim());
     } else {
       /* ── Insert new pair ── */
       const { data: inserted, error } = await supabase
@@ -255,14 +302,8 @@ export default function KnowledgeBasePage(): React.JSX.Element {
 
       toast.success("Q&A pair added!");
 
-      /* Generate embedding in the background */
-      generateAndStoreEmbedding(
-        inserted.id as string,
-        question.trim(),
-        answer.trim()
-      ).catch(() => {
-        /* non-blocking */
-      });
+      /* Generate embedding silently in the background */
+      generateEmbedding(inserted.id as string, question.trim());
     }
 
     setIsSaving(false);
@@ -361,16 +402,125 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     setTemplateDialogOpen(false);
     await loadData();
 
-    /* Generate embeddings for all inserted templates in the background */
-    generateEmbeddingsBatch(
-      inserted.map((row) => ({
-        id: row.id as string,
-        question: row.question as string,
-        answer: row.answer as string,
-      }))
-    ).catch(() => {
-      /* non-blocking – already handled inside the helper */
-    });
+    /* Generate embeddings for all inserted templates silently in parallel */
+    Promise.allSettled(
+      inserted.map((row) =>
+        generateEmbedding(row.id as string, row.question as string)
+      )
+    );
+  }
+
+  /* ── Open crawl dialog ── */
+  function handleOpenCrawl(): void {
+    setCrawlUrl("");
+    setCrawlResults([]);
+    setCrawlPagesScraped(0);
+    setIsCrawling(false);
+    setIsImporting(false);
+    setCrawlDialogOpen(true);
+  }
+
+  /** Trigger the crawl API and populate results. */
+  async function handleCrawl(): Promise<void> {
+    if (!crawlUrl.trim()) {
+      toast.error("Please enter a website URL.");
+      return;
+    }
+    if (!ctx?.chatbotId) {
+      toast.error("No chatbot found.");
+      return;
+    }
+
+    setIsCrawling(true);
+    setCrawlResults([]);
+    setCrawlPagesScraped(0);
+
+    try {
+      const res = await fetch("/api/crawl", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: crawlUrl.trim(), chatbotId: ctx.chatbotId }),
+      });
+
+      const data = (await res.json()) as {
+        pairs?: { question: string; answer: string }[];
+        pagesScraped?: number;
+        error?: string;
+      };
+
+      if (!res.ok || !data.pairs) {
+        toast.error(data.error || "Failed to crawl website.");
+        setIsCrawling(false);
+        return;
+      }
+
+      setCrawlPagesScraped(data.pagesScraped ?? 0);
+      setCrawlResults(
+        data.pairs.map((p) => ({
+          question: p.question,
+          answer: p.answer,
+          selected: true,
+        }))
+      );
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setIsCrawling(false);
+    }
+  }
+
+  /** Toggle a single crawl result's selection. */
+  function toggleCrawlResult(index: number): void {
+    setCrawlResults((prev) =>
+      prev.map((r, i) =>
+        i === index ? { ...r, selected: !r.selected } : r
+      )
+    );
+  }
+
+  /** Insert selected crawl results into the knowledge base. */
+  async function handleImportCrawlResults(): Promise<void> {
+    if (!ctx?.chatbotId) return;
+
+    const selected = crawlResults.filter((r) => r.selected);
+    if (selected.length === 0) {
+      toast.error("Please select at least one Q&A pair.");
+      return;
+    }
+
+    setIsImporting(true);
+    const supabase = createClient();
+
+    const rows = selected.map((r) => ({
+      chatbot_id: ctx.chatbotId,
+      question: r.question,
+      answer: r.answer,
+    }));
+
+    const { data: inserted, error } = await supabase
+      .from("qa_pairs")
+      .insert(rows)
+      .select("id, question");
+
+    if (error || !inserted) {
+      toast.error(error?.message || "Failed to import Q&A pairs.");
+      setIsImporting(false);
+      return;
+    }
+
+    toast.success(
+      `Imported ${inserted.length} Q&A pair${inserted.length !== 1 ? "s" : ""} from website!`
+    );
+    setIsImporting(false);
+    setCrawlDialogOpen(false);
+    await loadData();
+
+    /* Generate embeddings silently in the background */
+    Promise.allSettled(
+      inserted.map((row) =>
+        generateEmbedding(row.id as string, row.question as string)
+      )
+    );
   }
 
   /* ── Loading state ── */
@@ -417,7 +567,7 @@ export default function KnowledgeBasePage(): React.JSX.Element {
             )}
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           <Button
             variant="outline"
             onClick={handleOpenTemplates}
@@ -425,6 +575,14 @@ export default function KnowledgeBasePage(): React.JSX.Element {
           >
             <Sparkles className="size-4" />
             Load Templates
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleOpenCrawl}
+            className="border-[#2563EB]/30 text-[#2563EB] hover:bg-[#2563EB]/5"
+          >
+            <Globe className="size-4" />
+            Import from URL
           </Button>
           <Button
             onClick={handleOpenAdd}
@@ -467,7 +625,7 @@ export default function KnowledgeBasePage(): React.JSX.Element {
                 quickly.
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap justify-center gap-3">
               <Button
                 variant="outline"
                 onClick={handleOpenTemplates}
@@ -475,6 +633,14 @@ export default function KnowledgeBasePage(): React.JSX.Element {
               >
                 <Sparkles className="size-4" />
                 Load Templates
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleOpenCrawl}
+                className="border-[#2563EB]/30 text-[#2563EB] hover:bg-[#2563EB]/5"
+              >
+                <Globe className="size-4" />
+                Import from URL
               </Button>
               <Button
                 onClick={handleOpenAdd}
@@ -666,6 +832,178 @@ export default function KnowledgeBasePage(): React.JSX.Element {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ──── Import from URL Dialog ──── */}
+      <Dialog
+        open={crawlDialogOpen}
+        onOpenChange={(open) => {
+          if (!isCrawling && !isImporting) setCrawlDialogOpen(open);
+        }}
+      >
+        <DialogContent className="max-h-[85vh] sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#1E3A5F]">
+              <Globe className="size-5 text-[#2563EB]" />
+              Import Q&A from Website
+            </DialogTitle>
+            <DialogDescription>
+              Enter your website URL. We&apos;ll read the pages and use AI to
+              create Q&A pairs automatically.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* URL input + Crawl button */}
+          <div className="flex gap-2">
+            <Input
+              type="url"
+              placeholder="https://your-website.com"
+              value={crawlUrl}
+              onChange={(e) => setCrawlUrl(e.target.value)}
+              disabled={isCrawling}
+              className="flex-1"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !isCrawling) handleCrawl();
+              }}
+            />
+            <Button
+              onClick={handleCrawl}
+              disabled={isCrawling || !crawlUrl.trim()}
+              className="shrink-0 bg-[#2563EB] hover:bg-[#1d4ed8]"
+            >
+              {isCrawling ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Crawling…
+                </>
+              ) : (
+                "Crawl"
+              )}
+            </Button>
+          </div>
+
+          {/* Crawling state */}
+          {isCrawling && (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <Loader2 className="size-8 animate-spin text-[#2563EB]" />
+              <div>
+                <p className="font-medium text-[#1E3A5F]">
+                  Crawling website…
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  This may take up to a minute. We&apos;re reading your
+                  website and generating Q&A pairs with AI.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Results */}
+          {!isCrawling && crawlResults.length > 0 && (
+            <>
+              {/* Summary + Select/Deselect all */}
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <p className="text-sm text-slate-500">
+                  Found{" "}
+                  <strong className="text-slate-700">
+                    {crawlResults.length}
+                  </strong>{" "}
+                  Q&A pairs from{" "}
+                  <strong className="text-slate-700">
+                    {crawlPagesScraped}
+                  </strong>{" "}
+                  page{crawlPagesScraped !== 1 ? "s" : ""} —{" "}
+                  {crawlResults.filter((r) => r.selected).length} selected
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allSelected = crawlResults.every(
+                      (r) => r.selected
+                    );
+                    setCrawlResults((prev) =>
+                      prev.map((r) => ({ ...r, selected: !allSelected }))
+                    );
+                  }}
+                  className="text-sm font-medium text-[#2563EB] hover:underline"
+                >
+                  {crawlResults.every((r) => r.selected)
+                    ? "Deselect All"
+                    : "Select All"}
+                </button>
+              </div>
+
+              {/* Scrollable list */}
+              <div className="flex max-h-[45vh] flex-col gap-2 overflow-y-auto pr-1">
+                {crawlResults.map((result, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => toggleCrawlResult(index)}
+                    className={cn(
+                      "flex items-start gap-3 rounded-lg border p-3 text-left transition-all",
+                      result.selected
+                        ? "border-[#2563EB] bg-[#2563EB]/5"
+                        : "border-slate-200 bg-white hover:bg-slate-50"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border-2 transition-colors",
+                        result.selected
+                          ? "border-[#2563EB] bg-[#2563EB] text-white"
+                          : "border-slate-300"
+                      )}
+                    >
+                      {result.selected && <Check className="size-3" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[#1E3A5F]">
+                        {result.question}
+                      </p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                        {result.answer}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Import button */}
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setCrawlDialogOpen(false)}
+                  disabled={isImporting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleImportCrawlResults}
+                  disabled={
+                    isImporting ||
+                    crawlResults.filter((r) => r.selected).length === 0
+                  }
+                  className="bg-[#2563EB] hover:bg-[#1d4ed8]"
+                >
+                  {isImporting ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Importing…
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="size-4" />
+                      Import{" "}
+                      {crawlResults.filter((r) => r.selected).length} Q&A
+                      Pairs
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ──── Template Picker Dialog ──── */}
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
