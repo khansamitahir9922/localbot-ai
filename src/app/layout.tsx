@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -31,6 +32,13 @@ export default function RootLayout({
       >
         {children}
         <Toaster position="top-right" richColors closeButton />
+        {/* Embeddable chat widget – appears on all pages for testing. Replace token with your chatbot's embed_token. */}
+        <Script
+          id="lba-widget"
+          src="/widget.js"
+          data-token="722486eb-3554-4b38-932d-9307865444c1"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
