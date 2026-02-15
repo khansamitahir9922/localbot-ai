@@ -24,10 +24,59 @@
 
   // Session stored per token so conversation history is maintained across visits
   var STORAGE_KEY = "lba_session_" + token.trim();
+  var CONFIG_CACHE_KEY_PREFIX = "lba_config_";
+  var CONFIG_CACHE_EXPIRY_MS = 3600000; // 1 hour
   var BUBBLE_OFFSET = 24;
   var PANEL_WIDTH_DESKTOP = 380;
   var PANEL_HEIGHT_DESKTOP = 520;
   var MOBILE_BREAKPOINT = 480;
+
+  /**
+   * Get cached chatbot config from localStorage if present and not expired.
+   * Returns the config object (without lastFetched) or null if missing/expired/unavailable.
+   * Safe when localStorage is disabled (e.g. private browsing) – returns null.
+   */
+  function getCachedConfig(t) {
+    var key = CONFIG_CACHE_KEY_PREFIX + (t || token).trim();
+    try {
+      var raw = localStorage.getItem(key);
+      if (!raw) return null;
+      var stored = JSON.parse(raw);
+      if (!stored || typeof stored.lastFetched !== "number") return null;
+      if (Date.now() - stored.lastFetched > CONFIG_CACHE_EXPIRY_MS) return null;
+      var config = {};
+      if (stored.botName !== undefined) config.botName = stored.botName;
+      if (stored.primaryColor !== undefined) config.primaryColor = stored.primaryColor;
+      if (stored.welcomeMessage !== undefined) config.welcomeMessage = stored.welcomeMessage;
+      if (stored.fallbackMessage !== undefined) config.fallbackMessage = stored.fallbackMessage;
+      if (stored.widgetPosition !== undefined) config.widgetPosition = stored.widgetPosition;
+      return config;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Store chatbot config in localStorage with a lastFetched timestamp for expiry.
+   * No-op if localStorage is unavailable (e.g. private browsing).
+   */
+  function setCachedConfig(t, config) {
+    if (!config || typeof config !== "object") return;
+    var key = CONFIG_CACHE_KEY_PREFIX + (t || token).trim();
+    try {
+      var toStore = {
+        botName: config.botName,
+        primaryColor: config.primaryColor,
+        welcomeMessage: config.welcomeMessage,
+        fallbackMessage: config.fallbackMessage,
+        widgetPosition: config.widgetPosition,
+        lastFetched: Date.now(),
+      };
+      localStorage.setItem(key, JSON.stringify(toStore));
+    } catch (e) {
+      /* ignore */
+    }
+  }
 
   /**
    * Get or create a session ID (UUID) and persist in localStorage.
@@ -228,8 +277,94 @@
     if (el) el.remove();
   }
 
+  /**
+   * Mount the widget UI and wire events. Called with config from cache or API.
+   */
+  function initWidget(config) {
+    var primary = config.primaryColor || "#2563EB";
+    document.documentElement.style.setProperty("--lba-primary", primary);
+
+    var bubble = createBubble(config);
+    var ui = createPanel(config);
+    var panel = ui.panel;
+    var messagesEl = ui.messagesEl;
+    var input = ui.input;
+    var sendBtn = ui.sendBtn;
+
+    bubble.addEventListener("click", function () {
+      panel.classList.remove("lba-closed");
+      panel.setAttribute("aria-hidden", "false");
+      input.focus();
+    });
+
+    ui.closeBtn.addEventListener("click", function () {
+      panel.classList.add("lba-closed");
+      panel.setAttribute("aria-hidden", "true");
+    });
+
+    function send() {
+      var text = (input.value || "").trim();
+      if (!text) return;
+
+      input.value = "";
+      addMessage(messagesEl, text, true);
+
+      showTyping(messagesEl);
+      sendBtn.disabled = true;
+
+      fetch(baseUrl + "/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: token.trim(),
+          message: text,
+          session_id: getSessionId(),
+        }),
+      })
+        .then(function (res) {
+          return res.json().then(function (data) {
+            if (!res.ok) throw new Error(data.error || "Request failed");
+            return data;
+          });
+        })
+        .then(function (data) {
+          hideTyping(messagesEl);
+          addMessage(messagesEl, data.answer || "", false);
+        })
+        .catch(function () {
+          hideTyping(messagesEl);
+          addMessage(messagesEl, "Sorry, something went wrong. Please try again later.", false);
+        })
+        .finally(function () {
+          sendBtn.disabled = false;
+          input.focus();
+        });
+    }
+
+    sendBtn.addEventListener("click", send);
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    });
+
+    document.body.appendChild(bubble);
+    document.body.appendChild(panel);
+  }
+
+  /**
+   * Load config from cache or API, then initialize the widget.
+   * If localStorage is unavailable, always fetches from API.
+   */
   function run() {
     injectStyles();
+
+    var cached = getCachedConfig(token);
+    if (cached) {
+      initWidget(cached);
+      return;
+    }
 
     fetch(baseUrl + "/api/widget-config/" + encodeURIComponent(token.trim()))
       .then(function (res) {
@@ -237,76 +372,8 @@
         return res.json();
       })
       .then(function (config) {
-        var primary = config.primaryColor || "#2563EB";
-        document.documentElement.style.setProperty("--lba-primary", primary);
-
-        var bubble = createBubble(config);
-        var ui = createPanel(config);
-        var panel = ui.panel;
-        var messagesEl = ui.messagesEl;
-        var input = ui.input;
-        var sendBtn = ui.sendBtn;
-
-        bubble.addEventListener("click", function () {
-          panel.classList.remove("lba-closed");
-          panel.setAttribute("aria-hidden", "false");
-          input.focus();
-        });
-
-        ui.closeBtn.addEventListener("click", function () {
-          panel.classList.add("lba-closed");
-          panel.setAttribute("aria-hidden", "true");
-        });
-
-        function send() {
-          var text = (input.value || "").trim();
-          if (!text) return;
-
-          input.value = "";
-          addMessage(messagesEl, text, true);
-
-          showTyping(messagesEl);
-          sendBtn.disabled = true;
-
-          fetch(baseUrl + "/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              token: token.trim(),
-              message: text,
-              session_id: getSessionId(),
-            }),
-          })
-            .then(function (res) {
-              return res.json().then(function (data) {
-                if (!res.ok) throw new Error(data.error || "Request failed");
-                return data;
-              });
-            })
-            .then(function (data) {
-              hideTyping(messagesEl);
-              addMessage(messagesEl, data.answer || "", false);
-            })
-            .catch(function () {
-              hideTyping(messagesEl);
-              addMessage(messagesEl, "Sorry, something went wrong. Please try again later.", false);
-            })
-            .finally(function () {
-              sendBtn.disabled = false;
-              input.focus();
-            });
-        }
-
-        sendBtn.addEventListener("click", send);
-        input.addEventListener("keydown", function (e) {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            send();
-          }
-        });
-
-        document.body.appendChild(bubble);
-        document.body.appendChild(panel);
+        setCachedConfig(token, config);
+        initWidget(config);
       })
       .catch(function (err) {
         console.warn("[LocalBot AI] Could not load widget config:", err);
