@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod/v4";
+import Link from "next/link";
 import {
   ArrowLeft,
   Check,
@@ -979,6 +980,7 @@ function Step4Deploy(): React.JSX.Element {
 
   const [isCreating, setIsCreating] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
   const [embedToken, setEmbedToken] = useState<string | null>(
     onboardingData.embedToken ?? null
   );
@@ -1001,7 +1003,6 @@ function Step4Deploy(): React.JSX.Element {
 
     async function createChatbot(): Promise<void> {
       try {
-        const supabase = createClient();
         const customization = onboardingData.customization;
 
         if (!onboardingData.workspaceId) {
@@ -1010,9 +1011,11 @@ function Step4Deploy(): React.JSX.Element {
           return;
         }
 
-        const { data, error: insertError } = await supabase
-          .from("chatbots")
-          .insert({
+        const res = await fetch("/api/chatbots", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
             workspace_id: onboardingData.workspaceId,
             name: customization?.botName || onboardingData.businessName || "My Chatbot",
             bot_name: customization?.botName || "Assistant",
@@ -1025,23 +1028,36 @@ function Step4Deploy(): React.JSX.Element {
               "I'm not sure about that. Please contact us for more help.",
             widget_position: customization?.widgetPosition || "bottom-right",
             show_branding: true,
-          })
-          .select("id, embed_token")
-          .single();
+          }),
+        });
 
-        if (insertError) {
-          setError(
-            insertError.message || "Failed to create chatbot. Please try again."
-          );
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          if (res.status === 403 && (data as { code?: string }).code === "LIMIT_CHATBOTS") {
+            const d = data as { plan?: string; chatbotsUsed?: number; chatbotsLimit?: number };
+            const detail =
+              d.plan != null && d.chatbotsUsed != null && d.chatbotsLimit != null
+                ? ` You're on the ${d.plan} plan (${d.chatbotsUsed}/${d.chatbotsLimit} chatbots).`
+                : "";
+            setError(
+              `You've reached your chatbot limit for your current plan. Upgrade to add more chatbots.${detail}`
+            );
+            setLimitReached(true);
+          } else {
+            setError(
+              (data as { error?: string }).error || "Failed to create chatbot. Please try again."
+            );
+          }
           setIsCreating(false);
           return;
         }
 
         updateOnboardingData({
-          chatbotId: data.id,
-          embedToken: data.embed_token,
+          chatbotId: (data as { id: string }).id,
+          embedToken: (data as { embed_token?: string }).embed_token,
         });
-        setEmbedToken(data.embed_token);
+        setEmbedToken((data as { embed_token?: string }).embed_token);
         setIsCreating(false);
         toast.success("Chatbot created successfully!");
       } catch {
@@ -1106,7 +1122,7 @@ function Step4Deploy(): React.JSX.Element {
           <CardDescription>{error}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
               variant="outline"
@@ -1116,17 +1132,25 @@ function Step4Deploy(): React.JSX.Element {
               <ArrowLeft className="size-4" />
               Back
             </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                setError(null);
-                setIsCreating(true);
-                creationAttempted.current = false;
-              }}
-              className="h-11 bg-[#2563EB] text-base font-semibold shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
-            >
-              Try Again
-            </Button>
+            {!limitReached && (
+              <Button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setLimitReached(false);
+                  setIsCreating(true);
+                  creationAttempted.current = false;
+                }}
+                className="h-11 bg-[#2563EB] text-base font-semibold shadow-md shadow-[#2563EB]/20 hover:bg-[#1d4ed8]"
+              >
+                Try Again
+              </Button>
+            )}
+            {limitReached && (
+              <Button asChild className="h-11 bg-emerald-600 text-base font-semibold hover:bg-emerald-700">
+                <Link href="/dashboard/billing">Upgrade plan</Link>
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>

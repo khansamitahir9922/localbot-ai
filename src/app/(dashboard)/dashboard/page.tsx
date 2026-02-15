@@ -23,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 
 /* ────────────────────────── TYPES ────────────────────────── */
 
@@ -82,8 +83,19 @@ const STATUS_CONFIG: Record<
  * then displays metric cards, chatbot list, and a quick-setup prompt
  * when training data is missing.
  */
+interface UsageData {
+  plan: string;
+  chatbotsUsed: number;
+  chatbotsLimit: number;
+  qaPairsUsed: number;
+  qaPairsLimit: number;
+  conversationsUsed: number;
+  conversationsLimit: number;
+}
+
 export default function DashboardPage(): React.JSX.Element {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [usage, setUsage] = useState<UsageData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -100,12 +112,11 @@ export default function DashboardPage(): React.JSX.Element {
         return;
       }
 
-      /* ── Workspace check ── */
+      /* ── Workspace check: need at least one ── */
       const { data: workspaces, error: wsError } = await supabase
         .from("workspaces")
         .select("id, name")
-        .eq("user_id", user.id)
-        .limit(1);
+        .eq("user_id", user.id);
 
       const hasWorkspace =
         !wsError && Array.isArray(workspaces) && workspaces.length > 0;
@@ -115,26 +126,49 @@ export default function DashboardPage(): React.JSX.Element {
         return;
       }
 
-      const workspace = workspaces[0];
+      const workspaceIds = workspaces!.map((w) => w.id);
+      const firstWorkspace = workspaces![0];
 
-      /* ── Fetch chatbots ── */
+      /* ── Fetch chatbots from ALL workspaces (matches limit/usage count) ── */
       const { data: chatbots } = await supabase
         .from("chatbots")
-        .select("id, name, bot_name, primary_color, created_at")
-        .eq("workspace_id", workspace.id)
+        .select("id, name, bot_name, primary_color, created_at, workspace_id")
+        .in("workspace_id", workspaceIds)
         .order("created_at", { ascending: false });
 
-      /* ── Fetch knowledge item count (Q&A pairs) ── */
-      const { count: knowledgeCount } = await supabase
-        .from("knowledge_items")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", workspace.id);
+      const chatbotIds = (chatbots ?? []).map((c) => c.id);
+      let knowledgeCount = 0;
+      if (chatbotIds.length > 0) {
+        const { count } = await supabase
+          .from("qa_pairs")
+          .select("id", { count: "exact", head: true })
+          .in("chatbot_id", chatbotIds);
+        knowledgeCount = count ?? 0;
+      }
 
       setData({
-        businessName: workspace.name ?? "",
+        businessName: firstWorkspace.name ?? "",
         chatbots: (chatbots as ChatbotRow[]) ?? [],
-        knowledgeCount: knowledgeCount ?? 0,
+        knowledgeCount,
       });
+
+      try {
+        const uRes = await fetch("/api/limits/usage", { credentials: "include" });
+        if (uRes.ok) {
+          const u = await uRes.json();
+          setUsage({
+            plan: u.plan ?? "free",
+            chatbotsUsed: u.chatbotsUsed ?? 0,
+            chatbotsLimit: u.chatbotsLimit ?? 1,
+            qaPairsUsed: u.qaPairsUsed ?? 0,
+            qaPairsLimit: u.qaPairsLimit ?? 20,
+            conversationsUsed: u.conversationsUsed ?? 0,
+            conversationsLimit: u.conversationsLimit ?? 100,
+          });
+        }
+      } catch {
+        setUsage(null);
+      }
       setIsLoading(false);
     }
 
@@ -166,6 +200,73 @@ export default function DashboardPage(): React.JSX.Element {
           Here&apos;s an overview of your chatbot performance.
         </p>
       </div>
+
+      {/* ──── Plan usage ──── */}
+      {usage && (
+        <Card className="border-slate-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold text-[#1E3A5F]">
+              Plan usage
+            </CardTitle>
+            <CardDescription>
+              Your current usage against plan limits. Upgrade for more capacity.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Chatbots</span>
+                <span className="font-medium text-slate-800">
+                  {usage.chatbotsUsed} / {usage.chatbotsLimit}
+                </span>
+              </div>
+              <Progress
+                value={
+                  usage.chatbotsLimit > 0
+                    ? Math.min(100, (usage.chatbotsUsed / usage.chatbotsLimit) * 100)
+                    : 0
+                }
+                className="h-2"
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Q&A pairs</span>
+                <span className="font-medium text-slate-800">
+                  {usage.qaPairsUsed} / {usage.qaPairsLimit}
+                </span>
+              </div>
+              <Progress
+                value={
+                  usage.qaPairsLimit > 0
+                    ? Math.min(100, (usage.qaPairsUsed / usage.qaPairsLimit) * 100)
+                    : 0
+                }
+                className="h-2"
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">Conversations this month</span>
+                <span className="font-medium text-slate-800">
+                  {usage.conversationsUsed} / {usage.conversationsLimit}
+                </span>
+              </div>
+              <Progress
+                value={
+                  usage.conversationsLimit > 0
+                    ? Math.min(100, (usage.conversationsUsed / usage.conversationsLimit) * 100)
+                    : 0
+                }
+                className="h-2"
+              />
+            </div>
+            <Button variant="outline" size="sm" asChild className="mt-2">
+              <Link href="/dashboard/billing">Upgrade plan</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ──── Metric cards ──── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

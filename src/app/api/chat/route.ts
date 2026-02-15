@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import OpenAI from "openai";
 import { queryVectors, type QueryMatch } from "@/lib/pinecone/client";
+import { getUserPlan } from "@/lib/subscription";
+import { getTierLimits } from "@/lib/tier-limits";
 
 /* ─────────────────────────────────────────────────────────────
    POST /api/chat
@@ -157,12 +159,51 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    /* Fetch workspace for business name */
+    /* Fetch workspace for business name and owner (for plan limit) */
     const { data: workspace } = await supabase
       .from("workspaces")
-      .select("name")
+      .select("name, user_id")
       .eq("id", chatbot.workspace_id)
       .single();
+
+    const ownerId = workspace?.user_id as string | undefined;
+    if (ownerId) {
+      const plan = await getUserPlan(ownerId);
+      const limit = getTierLimits(plan).conversationsPerMonth;
+      const now = new Date();
+      const startOfMonth = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+      ).toISOString();
+      const { data: ownerWorkspaces } = await supabase
+        .from("workspaces")
+        .select("id")
+        .eq("user_id", ownerId);
+      const wsIds = (ownerWorkspaces ?? []).map((w) => w.id as string);
+      if (wsIds.length > 0) {
+        const { data: ownerChatbots } = await supabase
+          .from("chatbots")
+          .select("id")
+          .in("workspace_id", wsIds);
+        const cbIds = (ownerChatbots ?? []).map((c) => c.id as string);
+        if (cbIds.length > 0) {
+          const { count } = await supabase
+            .from("conversations")
+            .select("id", { count: "exact", head: true })
+            .in("chatbot_id", cbIds)
+            .gte("created_at", startOfMonth);
+          const conversationsThisMonth = count ?? 0;
+          if (conversationsThisMonth >= limit) {
+            return NextResponse.json(
+              {
+                error:
+                  "Conversation limit reached for this month. Please upgrade your plan or try again next month.",
+              },
+              { status: 402 }
+            );
+          }
+        }
+      }
+    }
 
     const botName = (chatbot.bot_name as string) || "Assistant";
     const businessName = (workspace?.name as string) || "our business";

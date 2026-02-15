@@ -35,8 +35,8 @@ export default function RootLayout({
         {/* Embeddable chat widget – appears on all pages for testing. Replace token with your chatbot's embed_token. */}
         <Script
           id="lba-widget"
-          src="/widget.js"
-          data-token="722486eb-3554-4b38-932d-9307865444c1"
+          src="/widget.js?v=3"
+          data-token="4e9b9ef4-8d15-4434-bab1-c667eba4345a"
           strategy="afterInteractive"
         />
       </body>

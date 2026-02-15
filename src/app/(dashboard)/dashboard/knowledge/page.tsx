@@ -13,6 +13,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { getTemplatesForBusinessType } from "@/lib/qa-templates";
@@ -48,6 +49,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
 
 /* ────────────────────────── TYPES ────────────────────────── */
 
@@ -187,7 +196,35 @@ export default function KnowledgeBasePage(): React.JSX.Element {
   /* ── Pinecone sync state ── */
   const [isSyncing, setIsSyncing] = useState(false);
 
-  /* ── Fetch chatbot + Q&A pairs ── */
+  /* ── Usage/limits for current user (from /api/limits/usage) ── */
+  const [usage, setUsage] = useState<{
+    plan: string;
+    qaPairsUsed: number;
+    qaPairsLimit: number;
+  } | null>(null);
+
+  /* ── All chatbots in workspace (for selector) ── */
+  const [chatbotsList, setChatbotsList] = useState<
+    { id: string; bot_name: string }[]
+  >([]);
+
+  /* ── Fetch Q&A pairs for a specific chatbot ── */
+  const loadPairsForChatbot = useCallback(
+    async (chatbotId: string): Promise<void> => {
+      const supabase = createClient();
+      const { data: qaPairs, error } = await supabase
+        .from("qa_pairs")
+        .select("id, chatbot_id, question, answer, created_at")
+        .eq("chatbot_id", chatbotId)
+        .order("created_at", { ascending: false });
+
+      if (error) toast.error("Failed to load Q&A pairs.");
+      setPairs((qaPairs as QaPair[]) ?? []);
+    },
+    []
+  );
+
+  /* ── Fetch workspace, all chatbots, and Q&A for first (or selected) chatbot ── */
   const loadData = useCallback(async (): Promise<void> => {
     const supabase = createClient();
 
@@ -200,7 +237,6 @@ export default function KnowledgeBasePage(): React.JSX.Element {
       return;
     }
 
-    /* Get the user's first workspace */
     const { data: workspaces } = await supabase
       .from("workspaces")
       .select("id, business_type")
@@ -215,41 +251,73 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     const workspaceId = workspaces[0].id as string;
     const businessType = (workspaces[0].business_type as string) ?? "other";
 
-    /* Get the first chatbot in the workspace */
+    /* Get all chatbots in the workspace */
     const { data: chatbots } = await supabase
       .from("chatbots")
-      .select("id")
+      .select("id, bot_name")
       .eq("workspace_id", workspaceId)
-      .order("created_at", { ascending: true })
-      .limit(1);
+      .order("created_at", { ascending: true });
 
     if (!chatbots || chatbots.length === 0) {
       setCtx({ chatbotId: "", workspaceId, businessType });
+      setChatbotsList([]);
       setIsLoading(false);
       return;
     }
 
-    const chatbotId = chatbots[0].id as string;
+    const list = chatbots as { id: string; bot_name: string }[];
+    setChatbotsList(list);
+    const chatbotId = list[0].id;
     setCtx({ chatbotId, workspaceId, businessType });
 
-    /* Fetch all Q&A pairs for this chatbot */
     const { data: qaPairs, error } = await supabase
       .from("qa_pairs")
       .select("id, chatbot_id, question, answer, created_at")
       .eq("chatbot_id", chatbotId)
       .order("created_at", { ascending: false });
 
-    if (error) {
-      toast.error("Failed to load Q&A pairs.");
-    }
-
+    if (error) toast.error("Failed to load Q&A pairs.");
     setPairs((qaPairs as QaPair[]) ?? []);
     setIsLoading(false);
   }, []);
 
+  /* ── Switch chatbot and reload its Q&A pairs ── */
+  function handleChatbotChange(newChatbotId: string): void {
+    if (!ctx) return;
+    setCtx({ ...ctx, chatbotId: newChatbotId });
+    loadPairsForChatbot(newChatbotId);
+  }
+
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  function refetchUsage(): void {
+    if (!ctx?.chatbotId) return;
+    fetch(`/api/limits/usage?chatbotId=${encodeURIComponent(ctx.chatbotId)}`, {
+      credentials: "include",
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.qaPairsUsed != null && data.qaPairsLimit != null) {
+          setUsage({
+            plan: data.plan ?? "free",
+            qaPairsUsed: data.qaPairsUsed,
+            qaPairsLimit: data.qaPairsLimit,
+          });
+        }
+      })
+      .catch(() => {});
+  }
+
+  /* ── Fetch usage/limits when chatbot is selected ── */
+  useEffect(() => {
+    if (!ctx?.chatbotId) {
+      setUsage(null);
+      return;
+    }
+    refetchUsage();
+  }, [ctx?.chatbotId]);
 
   /* ── Filtered pairs ── */
   const filteredPairs = searchQuery.trim()
@@ -315,27 +383,37 @@ export default function KnowledgeBasePage(): React.JSX.Element {
       /* Re-generate embedding silently in the background */
       generateEmbedding(editingPair.id, ctx.chatbotId, question.trim(), answer.trim());
     } else {
-      /* ── Insert new pair ── */
-      const { data: inserted, error } = await supabase
-        .from("qa_pairs")
-        .insert({
-          chatbot_id: ctx.chatbotId,
+      /* ── Insert new pair via API (enforces plan limit) ── */
+      const res = await fetch("/api/qa-pairs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          chatbotId: ctx.chatbotId,
           question: question.trim(),
           answer: answer.trim(),
-        })
-        .select("id")
-        .single();
+        }),
+      });
+      const data = (await res.json()) as { ids?: string[]; error?: string; code?: string };
 
-      if (error || !inserted) {
-        toast.error(error?.message || "Failed to add Q&A pair.");
+      if (!res.ok) {
+        if (res.status === 403 && data.code === "LIMIT_QA_PAIRS") {
+          toast.error("Q&A limit reached. Upgrade your plan to add more.", {
+            action: { label: "Upgrade", onClick: () => window.open("/dashboard/billing") },
+          });
+        } else {
+          toast.error(data.error || "Failed to add Q&A pair.");
+        }
         setIsSaving(false);
         return;
       }
 
+      const newId = data.ids?.[0];
       toast.success("Q&A pair added!");
-
-      /* Generate embedding silently in the background */
-      generateEmbedding(inserted.id as string, ctx.chatbotId, question.trim(), answer.trim());
+      if (newId) {
+        generateEmbedding(newId, ctx.chatbotId, question.trim(), answer.trim());
+      }
+      refetchUsage();
     }
 
     setIsSaving(false);
@@ -399,7 +477,7 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     );
   }
 
-  /** Bulk-insert selected templates. */
+  /** Bulk-insert selected templates via API (enforces plan limit). */
   async function handleInsertTemplates(): Promise<void> {
     if (!ctx?.chatbotId) return;
 
@@ -410,39 +488,45 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     }
 
     setIsLoadingTemplates(true);
-    const supabase = createClient();
 
-    const rows = selected.map((t) => ({
-      chatbot_id: ctx.chatbotId,
-      question: t.question,
-      answer: t.answer,
-    }));
+    const res = await fetch("/api/qa-pairs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        chatbotId: ctx.chatbotId,
+        pairs: selected.map((t) => ({ question: t.question, answer: t.answer })),
+      }),
+    });
+    const data = (await res.json()) as {
+      inserted?: number;
+      ids?: string[];
+      error?: string;
+      code?: string;
+    };
 
-    const { data: inserted, error } = await supabase
-      .from("qa_pairs")
-      .insert(rows)
-      .select("id, question, answer");
-
-    if (error || !inserted) {
-      toast.error(error?.message || "Failed to add templates.");
+    if (!res.ok) {
+      if (res.status === 403 && data.code === "LIMIT_QA_PAIRS") {
+        toast.error("Q&A limit reached. Upgrade your plan to add more.", {
+          action: { label: "Upgrade", onClick: () => window.open("/dashboard/billing") },
+        });
+      } else {
+        toast.error(data.error || "Failed to add templates.");
+      }
       setIsLoadingTemplates(false);
       return;
     }
 
-    toast.success(`Added ${inserted.length} Q&A pairs from templates!`);
+    const ids = data.ids ?? [];
+    toast.success(`Added ${ids.length} Q&A pairs from templates!`);
     setIsLoadingTemplates(false);
     setTemplateDialogOpen(false);
     await loadData();
+    refetchUsage();
 
-    /* Generate embeddings + Pinecone sync for all templates in parallel */
     Promise.allSettled(
-      inserted.map((row) =>
-        generateEmbedding(
-          row.id as string,
-          ctx.chatbotId,
-          row.question as string,
-          row.answer as string
-        )
+      selected.slice(0, ids.length).map((t, i) =>
+        generateEmbedding(ids[i]!, ctx.chatbotId!, t.question, t.answer)
       )
     );
   }
@@ -561,7 +645,7 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     );
   }
 
-  /** Insert selected crawl results into the knowledge base. */
+  /** Insert selected crawl results via API (enforces plan limit). */
   async function handleImportCrawlResults(): Promise<void> {
     if (!ctx?.chatbotId) return;
 
@@ -572,41 +656,47 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     }
 
     setIsImporting(true);
-    const supabase = createClient();
 
-    const rows = selected.map((r) => ({
-      chatbot_id: ctx.chatbotId,
-      question: r.question,
-      answer: r.answer,
-    }));
+    const res = await fetch("/api/qa-pairs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        chatbotId: ctx.chatbotId,
+        pairs: selected.map((r) => ({ question: r.question, answer: r.answer })),
+      }),
+    });
+    const data = (await res.json()) as {
+      inserted?: number;
+      ids?: string[];
+      error?: string;
+      code?: string;
+    };
 
-    const { data: inserted, error } = await supabase
-      .from("qa_pairs")
-      .insert(rows)
-      .select("id, question");
-
-    if (error || !inserted) {
-      toast.error(error?.message || "Failed to import Q&A pairs.");
+    if (!res.ok) {
+      if (res.status === 403 && data.code === "LIMIT_QA_PAIRS") {
+        toast.error("Q&A limit reached. Upgrade your plan to add more.", {
+          action: { label: "Upgrade", onClick: () => window.open("/dashboard/billing") },
+        });
+      } else {
+        toast.error(data.error || "Failed to import Q&A pairs.");
+      }
       setIsImporting(false);
       return;
     }
 
+    const ids = data.ids ?? [];
     toast.success(
-      `Imported ${inserted.length} Q&A pair${inserted.length !== 1 ? "s" : ""} from website!`
+      `Imported ${ids.length} Q&A pair${ids.length !== 1 ? "s" : ""} from website!`
     );
     setIsImporting(false);
     setCrawlDialogOpen(false);
     await loadData();
+    refetchUsage();
 
-    /* Generate embeddings + Pinecone sync in the background */
     Promise.allSettled(
-      inserted.map((row) =>
-        generateEmbedding(
-          row.id as string,
-          ctx.chatbotId,
-          row.question as string,
-          row.answer as string
-        )
+      selected.slice(0, ids.length).map((r, i) =>
+        generateEmbedding(ids[i]!, ctx.chatbotId!, r.question, r.answer)
       )
     );
   }
@@ -642,11 +732,30 @@ export default function KnowledgeBasePage(): React.JSX.Element {
     <div className="flex flex-col gap-6">
       {/* ──── Header ──── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-[#1E3A5F]">
-            Knowledge Base
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-2xl font-bold text-[#1E3A5F]">
+              Knowledge Base
+            </h2>
+            {chatbotsList.length > 1 && (
+              <Select
+                value={ctx.chatbotId}
+                onValueChange={handleChatbotChange}
+              >
+                <SelectTrigger className="w-[220px] border-slate-200 bg-white">
+                  <SelectValue placeholder="Select chatbot" />
+                </SelectTrigger>
+                <SelectContent>
+                  {chatbotsList.map((cb) => (
+                    <SelectItem key={cb.id} value={cb.id}>
+                      {cb.bot_name ?? "Unnamed"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <p className="text-sm text-slate-500">
             Add questions and answers so your chatbot knows how to respond.
             {pairs.length > 0 && (
               <span className="ml-1 font-medium text-slate-700">
@@ -654,6 +763,23 @@ export default function KnowledgeBasePage(): React.JSX.Element {
               </span>
             )}
           </p>
+          {usage && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span>
+                  {usage.qaPairsUsed} / {usage.qaPairsLimit} Q&A pairs used
+                </span>
+              </div>
+              <Progress
+                value={
+                  usage.qaPairsLimit > 0
+                    ? Math.min(100, (usage.qaPairsUsed / usage.qaPairsLimit) * 100)
+                    : 0
+                }
+                className="h-1.5 w-48"
+              />
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <Button
@@ -699,8 +825,42 @@ export default function KnowledgeBasePage(): React.JSX.Element {
             <Plus className="size-4" />
             Add New Q&A
           </Button>
+</div>
         </div>
-      </div>
+
+      {/* ──── Approaching limit warning ──── */}
+      {usage &&
+        usage.qaPairsLimit > 0 &&
+        usage.qaPairsUsed >= usage.qaPairsLimit * 0.8 &&
+        usage.qaPairsUsed < usage.qaPairsLimit && (
+          <Card className="border-amber-200 bg-amber-50/50">
+            <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-medium text-amber-800">
+                You&apos;re approaching your Q&A limit ({usage.qaPairsUsed}/{usage.qaPairsLimit}).
+                Upgrade to add more.
+              </p>
+              <Button asChild size="sm" className="shrink-0 bg-amber-600 hover:bg-amber-700">
+                <Link href="/dashboard/billing">Upgrade plan</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+      {/* ──── At limit ──── */}
+      {usage &&
+        usage.qaPairsLimit > 0 &&
+        usage.qaPairsUsed >= usage.qaPairsLimit && (
+          <Card className="border-rose-200 bg-rose-50/50">
+            <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-medium text-rose-800">
+                You&apos;ve reached your Q&A limit. Upgrade to add more pairs.
+              </p>
+              <Button asChild size="sm" className="shrink-0 bg-rose-600 hover:bg-rose-700">
+                <Link href="/dashboard/billing">Upgrade plan</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
       {/* ──── Search (show when there are items) ──── */}
       {pairs.length > 0 && (
