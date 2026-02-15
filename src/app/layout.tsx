@@ -32,7 +32,9 @@ export default function RootLayout({
       >
         {children}
         <Toaster position="top-right" richColors closeButton />
-        {/* Embeddable chat widget – appears on all pages for testing. Replace token with your chatbot's embed_token. */}
+        {/* Chat widget on this app: one bot is shown (by data-token). This is for testing only.
+            The token below is fixed – e.g. "tahir dopatta Assistant". The Analytics dropdown shows
+            which bot's data you're viewing; the bubble here stays this one bot unless you change the token. */}
         <Script
           id="lba-widget"
           src="/widget.js?v=3"
