@@ -8,8 +8,12 @@ import {
   CheckCircle2,
   Bot,
   Menu,
+  Play,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+/** Set in .env.local as NEXT_PUBLIC_DEMO_VIDEO_URL (e.g. https://www.youtube.com/embed/VIDEO_ID) to show your demo video. */
+const DEMO_VIDEO_URL = process.env.NEXT_PUBLIC_DEMO_VIDEO_URL ?? "";
 
 /**
  * Marketing homepage for LocalBot AI.
@@ -32,6 +36,12 @@ export default function MarketingHomePage(): React.JSX.Element {
 
           {/* Desktop nav links */}
           <div className="hidden items-center gap-6 md:flex">
+            <Link
+              href="#see-it-in-action"
+              className="text-sm font-medium text-slate-600 transition-colors hover:text-[#1E3A5F]"
+            >
+              See Demo
+            </Link>
             <Link
               href="#features"
               className="text-sm font-medium text-slate-600 transition-colors hover:text-[#1E3A5F]"
@@ -120,7 +130,7 @@ export default function MarketingHomePage(): React.JSX.Element {
                 size="lg"
                 className="h-12 w-full rounded-lg border-slate-300 px-8 text-base font-semibold text-[#1E3A5F] hover:border-[#2563EB]/30 hover:bg-[#2563EB]/5 sm:w-auto"
               >
-                <Link href="#how-it-works">See How It Works</Link>
+                <Link href="#see-it-in-action">Watch Demo</Link>
               </Button>
             </div>
 
@@ -129,6 +139,60 @@ export default function MarketingHomePage(): React.JSX.Element {
               Free forever plan &middot; No credit card required &middot; Setup
               in under 5 minutes
             </p>
+          </div>
+        </section>
+
+        {/* ──────────────────── VIDEO: SEE IT IN ACTION ──────────────────── */}
+        <section
+          id="see-it-in-action"
+          className="border-t border-slate-100 bg-slate-50 px-4 py-20 sm:px-6 sm:py-28 lg:px-8"
+        >
+          <div className="mx-auto max-w-4xl">
+            <div className="text-center">
+              <h2 className="text-3xl font-bold tracking-tight text-[#1E3A5F] sm:text-4xl">
+                See LocalBot AI in Action
+              </h2>
+              <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
+                Watch how easy it is to create your AI chatbot, add your
+                knowledge base, and embed it on your website — no coding
+                required.
+              </p>
+            </div>
+
+            <div className="mt-12">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/50 ring-1 ring-slate-200/50">
+                {DEMO_VIDEO_URL ? (
+                  <div className="relative aspect-video w-full bg-slate-900">
+                    <iframe
+                      src={DEMO_VIDEO_URL}
+                      title="LocalBot AI demo video"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      className="absolute inset-0 size-full"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 bg-gradient-to-br from-slate-100 to-slate-200 px-6 text-center">
+                    <div className="flex size-20 items-center justify-center rounded-full bg-[#2563EB] text-white shadow-lg shadow-[#2563EB]/30 transition-transform hover:scale-105">
+                      <Play className="size-10 ml-1" fill="currentColor" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-[#1E3A5F]">
+                        Your demo video goes here
+                      </p>
+                      <p className="mt-1 max-w-md text-sm text-slate-600">
+                        Add a short video showing your chatbot: how to sign up,
+                        add Q&A, and embed the widget. Set{" "}
+                        <code className="rounded bg-slate-200 px-1.5 py-0.5 text-xs">
+                          NEXT_PUBLIC_DEMO_VIDEO_URL
+                        </code>{" "}
+                        in .env.local with your YouTube or Vimeo embed URL.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -258,6 +322,12 @@ export default function MarketingHomePage(): React.JSX.Element {
 
             <div className="flex items-center gap-6">
               <Link
+                href="#see-it-in-action"
+                className="text-sm text-slate-500 transition-colors hover:text-[#1E3A5F]"
+              >
+                See Demo
+              </Link>
+              <Link
                 href="/pricing"
                 className="text-sm text-slate-500 transition-colors hover:text-[#1E3A5F]"
               >
@@ -353,6 +423,12 @@ function MobileNav(): React.JSX.Element {
         <Menu className="size-5 text-[#1E3A5F]" />
       </summary>
       <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+        <Link
+          href="#see-it-in-action"
+          className="block rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        >
+          See Demo
+        </Link>
         <Link
           href="#features"
           className="block rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
