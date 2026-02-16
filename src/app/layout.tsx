@@ -37,7 +37,7 @@ export default function RootLayout({
             which bot's data you're viewing; the bubble here stays this one bot unless you change the token. */}
         <Script
           id="lba-widget"
-          src="/widget.js?v=3"
+          src="/widget.js?v=8"
           data-token="4e9b9ef4-8d15-4434-bab1-c667eba4345a"
           strategy="afterInteractive"
         />

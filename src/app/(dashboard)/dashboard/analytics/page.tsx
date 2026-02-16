@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,6 +75,7 @@ interface ChatbotOption {
 }
 
 export default function AnalyticsPage(): React.JSX.Element {
+  const searchParams = useSearchParams();
   const [chatbotsList, setChatbotsList] = useState<ChatbotOption[]>([]);
   const [selectedChatbotId, setSelectedChatbotId] = useState<string | null>(null);
   const [data, setData] = useState<AnalyticsData | null>(null);
@@ -158,10 +160,17 @@ export default function AnalyticsPage(): React.JSX.Element {
         setLoading(false);
         return;
       }
-      loadAnalytics();
+      const urlChatbotId = searchParams.get("chatbotId");
+      if (urlChatbotId && list.some((c) => c.id === urlChatbotId)) {
+        setSelectedChatbotId(urlChatbotId);
+        loadAnalytics(urlChatbotId);
+        checkStatus(urlChatbotId);
+      } else {
+        loadAnalytics();
+      }
     }
     init();
-  }, [loadAnalytics]);
+  }, [loadAnalytics, searchParams, checkStatus]);
 
   function handleAddToKnowledgeBase(_userMessage: string): void {
     toast.info("Feature coming soon: Add to Knowledge Base");

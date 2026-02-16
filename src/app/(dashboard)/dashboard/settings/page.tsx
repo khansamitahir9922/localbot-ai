@@ -5,6 +5,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod/v4";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   Download,
@@ -85,6 +86,8 @@ interface ChatbotData {
 /* ────────────────────────── PAGE ────────────────────────── */
 
 export default function SettingsPage(): React.JSX.Element {
+  const searchParams = useSearchParams();
+  const urlChatbotId = searchParams.get("chatbotId");
   const [chatbotId, setChatbotId] = useState<string | null>(null);
   const [chatbot, setChatbot] = useState<ChatbotData | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -127,17 +130,28 @@ export default function SettingsPage(): React.JSX.Element {
       return;
     }
 
-    const { data: chatbots } = await supabase
-      .from("chatbots")
-      .select("id, name, bot_name, primary_color, welcome_message, fallback_message, widget_position, avatar_style")
-      .in("workspace_id", wsIds)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (chatbots?.length) {
-      const bot = chatbots[0] as ChatbotData;
-      setChatbotId(bot.id);
-      setChatbot(bot);
+    let botToSet: ChatbotData | null = null;
+    if (urlChatbotId?.trim()) {
+      const { data: singleBot } = await supabase
+        .from("chatbots")
+        .select("id, name, bot_name, primary_color, welcome_message, fallback_message, widget_position, avatar_style")
+        .eq("id", urlChatbotId.trim())
+        .in("workspace_id", wsIds)
+        .single();
+      if (singleBot) botToSet = singleBot as ChatbotData;
+    }
+    if (!botToSet) {
+      const { data: chatbots } = await supabase
+        .from("chatbots")
+        .select("id, name, bot_name, primary_color, welcome_message, fallback_message, widget_position, avatar_style")
+        .in("workspace_id", wsIds)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (chatbots?.length) botToSet = chatbots[0] as ChatbotData;
+    }
+    if (botToSet) {
+      setChatbotId(botToSet.id);
+      setChatbot(botToSet);
     }
 
     const { data: sub } = await supabase
@@ -150,7 +164,7 @@ export default function SettingsPage(): React.JSX.Element {
       .maybeSingle();
     setSubscriptionPlan((sub?.plan as string) ?? "free");
     setLoading(false);
-  }, []);
+  }, [urlChatbotId]);
 
   useEffect(() => {
     loadData();

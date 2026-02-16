@@ -1072,7 +1072,7 @@ function Step4Deploy(): React.JSX.Element {
 
   /** Build the embed snippet using the public token. */
   const embedSnippet = embedToken
-    ? `<!-- LocalBot AI Widget -->\n<script\n  src="${typeof window !== "undefined" ? window.location.origin : ""}/widget.js"\n  data-chatbot-id="${embedToken}"\n  defer\n></script>`
+    ? `<!-- LocalBot AI Widget -->\n<script\n  src="${typeof window !== "undefined" ? window.location.origin : ""}/widget.js"\n  data-token="${embedToken}"\n  defer\n></script>`
     : "";
 
   /** Chat page URL the owner can share directly. */
