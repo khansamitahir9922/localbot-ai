@@ -33,7 +33,7 @@ export async function GET(
 
     const { data: chatbot, error } = await supabase
       .from("chatbots")
-      .select("bot_name, primary_color, welcome_message, fallback_message, widget_position")
+      .select("bot_name, primary_color, welcome_message, fallback_message, widget_position, avatar_style")
       .eq("embed_token", token.trim())
       .single();
 
@@ -52,6 +52,7 @@ export async function GET(
         (chatbot.fallback_message as string) ??
         "I'm sorry, I don't have an answer for that. Please contact us directly.",
       widgetPosition: (chatbot.widget_position as string) ?? "bottom-right",
+      avatarStyle: (chatbot.avatar_style as string) ?? "1",
     });
   } catch (err: unknown) {
     console.error("[/api/widget-config] Error:", err);

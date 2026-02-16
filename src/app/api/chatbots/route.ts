@@ -88,6 +88,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         (b.fallback_message as string) ?? "I'm not sure about that. Please contact us for more help.",
       widget_position: (b.widget_position as string) ?? "bottom-right",
       show_branding: b.show_branding !== false,
+      avatar_style: /^([1-9]|10)$/.test((b.avatar_style as string) ?? "") ? (b.avatar_style as string) : "1",
     };
 
     const { data: created, error } = await supabase
