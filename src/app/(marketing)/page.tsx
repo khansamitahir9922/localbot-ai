@@ -9,11 +9,21 @@ import {
   Bot,
   Menu,
   Play,
+  Mail,
+  MessageCircle,
+  Instagram,
+  Facebook,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { WhyLocalBotCarousel } from "@/components/marketing/why-localbot-carousel";
 
-/** Set in .env.local as NEXT_PUBLIC_DEMO_VIDEO_URL (e.g. https://www.youtube.com/embed/VIDEO_ID) to show your demo video. */
+/**
+ * Demo video: set in .env.local as NEXT_PUBLIC_DEMO_VIDEO_URL.
+ * - YouTube/Vimeo: use embed URL (e.g. https://www.youtube.com/embed/VIDEO_ID) → shown in iframe.
+ * - Local file: put your video in public/ (e.g. public/demo.mp4) and set this to /demo.mp4 → shown in <video>.
+ */
 const DEMO_VIDEO_URL = process.env.NEXT_PUBLIC_DEMO_VIDEO_URL ?? "";
+const isEmbedUrl = DEMO_VIDEO_URL.startsWith("http");
 
 /**
  * Marketing homepage for LocalBot AI.
@@ -41,6 +51,12 @@ export default function MarketingHomePage(): React.JSX.Element {
               className="text-sm font-medium text-slate-600 transition-colors hover:text-[#1E3A5F]"
             >
               See Demo
+            </Link>
+            <Link
+              href="#why-localbot"
+              className="text-sm font-medium text-slate-600 transition-colors hover:text-[#1E3A5F]"
+            >
+              Why LocalBot AI
             </Link>
             <Link
               href="#features"
@@ -83,7 +99,7 @@ export default function MarketingHomePage(): React.JSX.Element {
 
       <main>
         {/* ───────────────────────── HERO ───────────────────────── */}
-        <section className="relative overflow-hidden bg-gradient-to-b from-slate-50 to-white px-4 pb-20 pt-16 sm:px-6 sm:pb-28 sm:pt-24 lg:px-8">
+        <section className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-amber-50/30 px-4 pb-14 pt-12 sm:px-6 sm:pb-20 sm:pt-16 lg:px-8">
           {/* Decorative background blobs */}
           <div
             aria-hidden="true"
@@ -142,34 +158,61 @@ export default function MarketingHomePage(): React.JSX.Element {
           </div>
         </section>
 
+        {/* ──────────────────── WHY LOCALBOT AI (colourful cards) ──────────────────── */}
+        <section
+          id="why-localbot"
+          className="border-t border-slate-100 bg-gradient-to-b from-amber-50/40 via-white to-violet-50/30 px-4 py-14 sm:px-6 sm:py-18 lg:px-8"
+        >
+          <div className="mx-auto max-w-4xl text-center">
+            <h2 className="text-2xl font-bold tracking-tight text-[#1E3A5F] sm:text-3xl lg:text-4xl">
+              What makes LocalBot AI the best AI chatbot for your business?
+            </h2>
+          </div>
+          <div className="mt-10">
+            <WhyLocalBotCarousel />
+          </div>
+        </section>
+
         {/* ──────────────────── VIDEO: SEE IT IN ACTION ──────────────────── */}
         <section
           id="see-it-in-action"
-          className="border-t border-slate-100 bg-slate-50 px-4 py-20 sm:px-6 sm:py-28 lg:px-8"
+          className="border-t border-slate-100 bg-slate-50/80 px-4 py-14 sm:px-6 sm:py-18 lg:px-8"
         >
           <div className="mx-auto max-w-4xl">
             <div className="text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-[#1E3A5F] sm:text-4xl">
+              <h2 className="text-2xl font-bold tracking-tight text-[#1E3A5F] sm:text-3xl lg:text-4xl">
                 See LocalBot AI in Action
               </h2>
-              <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
+              <p className="mx-auto mt-3 max-w-2xl text-base text-slate-600 sm:text-lg">
                 Watch how easy it is to create your AI chatbot, add your
                 knowledge base, and embed it on your website — no coding
                 required.
               </p>
             </div>
 
-            <div className="mt-12">
+            <div className="mt-8">
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/50 ring-1 ring-slate-200/50">
                 {DEMO_VIDEO_URL ? (
                   <div className="relative aspect-video w-full bg-slate-900">
-                    <iframe
-                      src={DEMO_VIDEO_URL}
-                      title="LocalBot AI demo video"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                      className="absolute inset-0 size-full"
-                    />
+                    {isEmbedUrl ? (
+                      <iframe
+                        src={DEMO_VIDEO_URL}
+                        title="LocalBot AI demo video"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                        className="absolute inset-0 size-full"
+                      />
+                    ) : (
+                      <video
+                        src={DEMO_VIDEO_URL}
+                        controls
+                        playsInline
+                        className="absolute inset-0 size-full object-contain"
+                        title="LocalBot AI demo video"
+                      >
+                        Your browser does not support the video tag.
+                      </video>
+                    )}
                   </div>
                 ) : (
                   <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 bg-gradient-to-br from-slate-100 to-slate-200 px-6 text-center">
@@ -181,12 +224,7 @@ export default function MarketingHomePage(): React.JSX.Element {
                         Your demo video goes here
                       </p>
                       <p className="mt-1 max-w-md text-sm text-slate-600">
-                        Add a short video showing your chatbot: how to sign up,
-                        add Q&A, and embed the widget. Set{" "}
-                        <code className="rounded bg-slate-200 px-1.5 py-0.5 text-xs">
-                          NEXT_PUBLIC_DEMO_VIDEO_URL
-                        </code>{" "}
-                        in .env.local with your YouTube or Vimeo embed URL.
+                        Add your video: (1) Put the file in the <code className="rounded bg-slate-200 px-1.5 py-0.5 text-xs">public/</code> folder (e.g. <code className="rounded bg-slate-200 px-1.5 py-0.5 text-xs">public/demo.mp4</code>), then set <code className="rounded bg-slate-200 px-1.5 py-0.5 text-xs">NEXT_PUBLIC_DEMO_VIDEO_URL=/demo.mp4</code> in <code className="rounded bg-slate-200 px-1.5 py-0.5 text-xs">.env.local</code>. Or use a YouTube/Vimeo embed URL.
                       </p>
                     </div>
                   </div>
@@ -199,49 +237,55 @@ export default function MarketingHomePage(): React.JSX.Element {
         {/* ──────────────────── FEATURES GRID ──────────────────── */}
         <section
           id="features"
-          className="border-t border-slate-100 bg-white px-4 py-20 sm:px-6 sm:py-28 lg:px-8"
+          className="border-t border-slate-100 bg-white px-4 py-14 sm:px-6 sm:py-18 lg:px-8"
         >
           <div className="mx-auto max-w-7xl">
             <div className="text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-[#1E3A5F] sm:text-4xl">
+              <h2 className="text-2xl font-bold tracking-tight text-[#1E3A5F] sm:text-3xl lg:text-4xl">
                 Everything You Need to Automate Customer Support
               </h2>
-              <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
+              <p className="mx-auto mt-3 max-w-2xl text-base text-slate-600 sm:text-lg">
                 Built for restaurants, clinics, salons, gyms, law firms, and
                 every local business that deserves great support.
               </p>
             </div>
 
-            <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               <FeatureCard
-                icon={<MessageSquare className="size-6 text-[#2563EB]" />}
+                icon={<MessageSquare className="size-6 text-white" />}
                 title="AI-Powered Chat"
                 description="GPT-4o-mini answers questions using your business knowledge base. Accurate, conversational, and always on brand."
+                accent="blue"
               />
               <FeatureCard
-                icon={<Globe className="size-6 text-[#2563EB]" />}
+                icon={<Globe className="size-6 text-white" />}
                 title="Website Auto-Training"
                 description="Paste your URL and we'll crawl your website to build the chatbot's knowledge — no manual data entry."
+                accent="emerald"
               />
               <FeatureCard
-                icon={<Zap className="size-6 text-[#2563EB]" />}
+                icon={<Zap className="size-6 text-white" />}
                 title="5-Minute Setup"
                 description="Pick your business type, customize the widget, copy one line of code, and you're live. Dead simple."
+                accent="amber"
               />
               <FeatureCard
-                icon={<BarChart3 className="size-6 text-[#2563EB]" />}
+                icon={<BarChart3 className="size-6 text-white" />}
                 title="Analytics Dashboard"
                 description="Track conversations, popular questions, customer satisfaction, and discover gaps in your knowledge base."
+                accent="violet"
               />
               <FeatureCard
-                icon={<CheckCircle2 className="size-6 text-[#2563EB]" />}
+                icon={<CheckCircle2 className="size-6 text-white" />}
                 title="Custom Q&A Pairs"
                 description="Add, edit, or delete questions and answers at any time. Your chatbot gets smarter as you refine it."
+                accent="rose"
               />
               <FeatureCard
-                icon={<Bot className="size-6 text-[#2563EB]" />}
+                icon={<Bot className="size-6 text-white" />}
                 title="Fully Branded Widget"
                 description="Match your brand colors, set a custom welcome message, and position the widget anywhere on your site."
+                accent="sky"
               />
             </div>
           </div>
@@ -250,19 +294,19 @@ export default function MarketingHomePage(): React.JSX.Element {
         {/* ─────────────────── HOW IT WORKS ─────────────────── */}
         <section
           id="how-it-works"
-          className="border-t border-slate-100 bg-slate-50 px-4 py-20 sm:px-6 sm:py-28 lg:px-8"
+          className="border-t border-slate-100 bg-gradient-to-b from-slate-50 to-slate-100/50 px-4 py-14 sm:px-6 sm:py-18 lg:px-8"
         >
           <div className="mx-auto max-w-5xl">
             <div className="text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-[#1E3A5F] sm:text-4xl">
+              <h2 className="text-2xl font-bold tracking-tight text-[#1E3A5F] sm:text-3xl lg:text-4xl">
                 Go Live in 3 Simple Steps
               </h2>
-              <p className="mx-auto mt-4 max-w-xl text-lg text-slate-600">
+              <p className="mx-auto mt-3 max-w-xl text-base text-slate-600 sm:text-lg">
                 No developers. No meetings. No headaches.
               </p>
             </div>
 
-            <div className="mt-16 grid gap-10 sm:grid-cols-3">
+            <div className="mt-10 grid gap-8 sm:grid-cols-3">
               <StepCard
                 step="1"
                 title="Describe Your Business"
@@ -283,12 +327,12 @@ export default function MarketingHomePage(): React.JSX.Element {
         </section>
 
         {/* ──────────────────── FINAL CTA ──────────────────── */}
-        <section className="border-t border-slate-100 bg-[#1E3A5F] px-4 py-20 sm:px-6 sm:py-28 lg:px-8">
+        <section className="border-t border-slate-100 bg-[#1E3A5F] px-4 py-14 sm:px-6 sm:py-18 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+            <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">
               Ready to Automate Your Customer Support?
             </h2>
-            <p className="mx-auto mt-4 max-w-xl text-lg text-slate-300">
+            <p className="mx-auto mt-3 max-w-xl text-base text-slate-300 sm:text-lg">
               Join hundreds of local businesses already using LocalBot AI to
               answer customer questions instantly.
             </p>
@@ -311,45 +355,141 @@ export default function MarketingHomePage(): React.JSX.Element {
         </section>
 
         {/* ───────────────────────── FOOTER ───────────────────────── */}
-        <footer className="border-t border-slate-200 bg-white px-4 py-12 sm:px-6 lg:px-8">
-          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 sm:flex-row">
-            <div className="flex items-center gap-2">
-              <Bot className="size-5 text-[#2563EB]" />
-              <span className="text-sm font-semibold text-[#1E3A5F]">
-                LocalBot AI
-              </span>
+        <footer className="border-t border-slate-200 bg-slate-50/50 px-4 py-12 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-5">
+              {/* Brand */}
+              <div className="sm:col-span-2 lg:col-span-1">
+                <Link href="/" className="flex items-center gap-2">
+                  <Bot className="size-6 text-[#2563EB]" />
+                  <span className="font-semibold text-[#1E3A5F]">LocalBot AI</span>
+                </Link>
+                <p className="mt-3 text-sm text-slate-500">
+                  AI chatbot builder for local businesses.
+                </p>
+              </div>
+
+              {/* Product */}
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                  Product
+                </h3>
+                <ul className="mt-4 space-y-2">
+                  <li>
+                    <Link href="#features" className="text-sm text-slate-600 hover:text-[#1E3A5F]">Features</Link>
+                  </li>
+                  <li>
+                    <Link href="/pricing" className="text-sm text-slate-600 hover:text-[#1E3A5F]">Pricing</Link>
+                  </li>
+                  <li>
+                    <Link href="#see-it-in-action" className="text-sm text-slate-600 hover:text-[#1E3A5F]">See Demo</Link>
+                  </li>
+                  <li>
+                    <Link href="/changelog" className="text-sm text-slate-600 hover:text-[#1E3A5F]">Changelog</Link>
+                  </li>
+                  <li>
+                    <Link href="/roadmap" className="text-sm text-slate-600 hover:text-[#1E3A5F]">Roadmap</Link>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Resources */}
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                  Resources
+                </h3>
+                <ul className="mt-4 space-y-2">
+                  <li>
+                    <Link href="/help" className="text-sm text-slate-600 hover:text-[#1E3A5F]">Help / FAQ</Link>
+                  </li>
+                  <li>
+                    <Link href="/docs" className="text-sm text-slate-600 hover:text-[#1E3A5F]">Docs</Link>
+                  </li>
+                  <li>
+                    <Link href="/blog" className="text-sm text-slate-600 hover:text-[#1E3A5F]">Blog</Link>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Legal & Contact */}
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                  Legal
+                </h3>
+                <ul className="mt-4 space-y-2">
+                  <li>
+                    <Link href="/privacy" className="text-sm text-slate-600 hover:text-[#1E3A5F]">Privacy Policy</Link>
+                  </li>
+                  <li>
+                    <Link href="/terms" className="text-sm text-slate-600 hover:text-[#1E3A5F]">Terms of Service</Link>
+                  </li>
+                  <li>
+                    <Link href="/cookies" className="text-sm text-slate-600 hover:text-[#1E3A5F]">Cookie Policy</Link>
+                  </li>
+                </ul>
+                <h3 className="mt-6 text-sm font-semibold uppercase tracking-wider text-slate-400">
+                  Contact
+                </h3>
+                <ul className="mt-4 space-y-2">
+                  <li>
+                    <a href="mailto:localBot_AI@gmail.com" className="text-sm text-slate-600 hover:text-[#1E3A5F]">localBot_AI@gmail.com</a>
+                  </li>
+                  <li>
+                    <Link href="/contact" className="text-sm text-slate-600 hover:text-[#1E3A5F]">Contact</Link>
+                  </li>
+                </ul>
+              </div>
             </div>
 
-            <div className="flex items-center gap-6">
-              <Link
-                href="#see-it-in-action"
-                className="text-sm text-slate-500 transition-colors hover:text-[#1E3A5F]"
+            {/* Social */}
+            <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-slate-200 pt-8">
+              <a
+                href="https://wa.me/923109080328"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-slate-600 hover:text-green-600"
+                aria-label="WhatsApp"
               >
-                See Demo
-              </Link>
-              <Link
-                href="/pricing"
-                className="text-sm text-slate-500 transition-colors hover:text-[#1E3A5F]"
+                <MessageCircle className="size-5" />
+                WhatsApp
+              </a>
+              <a
+                href="mailto:localBot_AI@gmail.com"
+                className="flex items-center gap-2 text-sm text-slate-600 hover:text-[#1E3A5F]"
+                aria-label="Email"
               >
-                Pricing
-              </Link>
-              <Link
-                href="#features"
-                className="text-sm text-slate-500 transition-colors hover:text-[#1E3A5F]"
+                <Mail className="size-5" />
+                Gmail
+              </a>
+              <a
+                href="https://instagram.com/LocalBot_AI"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-slate-600 hover:text-pink-600"
+                aria-label="Instagram"
               >
-                Features
-              </Link>
-              <Link
-                href="/login"
-                className="text-sm text-slate-500 transition-colors hover:text-[#1E3A5F]"
+                <Instagram className="size-5" />
+                Instagram
+              </a>
+              <a
+                href="https://facebook.com/LocalBot_AI"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-slate-600 hover:text-blue-600"
+                aria-label="Facebook"
               >
-                Log In
-              </Link>
+                <Facebook className="size-5" />
+                Facebook
+              </a>
             </div>
 
-            <p className="text-sm text-slate-400">
-              &copy; {new Date().getFullYear()} LocalBot AI. All rights
-              reserved.
+            {/* Copyright & Built by */}
+            <p className="mt-6 text-sm text-slate-500">
+              &copy; {new Date().getFullYear()} LocalBot AI. Built by{" "}
+              <a href="mailto:khansamitahir9922@gmail.com" className="text-[#2563EB] hover:underline">
+                Abdul Sami
+              </a>
+              . All rights reserved.
             </p>
           </div>
         </footer>
@@ -362,6 +502,15 @@ export default function MarketingHomePage(): React.JSX.Element {
    SUBCOMPONENTS – Colocated for simplicity; extract when reuse grows.
    ═══════════════════════════════════════════════════════════════════ */
 
+const FEATURE_ACCENT_MAP = {
+  blue: { card: "border-[#2563EB]/25 hover:border-[#2563EB]/40", iconBg: "bg-[#2563EB]", title: "text-[#1E3A5F]" },
+  emerald: { card: "border-emerald-300/60 hover:border-emerald-400", iconBg: "bg-emerald-500", title: "text-emerald-900" },
+  amber: { card: "border-amber-300/60 hover:border-amber-400", iconBg: "bg-amber-500", title: "text-amber-900" },
+  violet: { card: "border-violet-300/60 hover:border-violet-400", iconBg: "bg-violet-500", title: "text-violet-900" },
+  rose: { card: "border-rose-300/60 hover:border-rose-400", iconBg: "bg-rose-500", title: "text-rose-900" },
+  sky: { card: "border-sky-300/60 hover:border-sky-400", iconBg: "bg-sky-500", title: "text-sky-900" },
+} as const;
+
 /**
  * A single feature highlight card with an icon, title, and description.
  */
@@ -369,17 +518,20 @@ function FeatureCard({
   icon,
   title,
   description,
+  accent = "blue",
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
+  accent?: keyof typeof FEATURE_ACCENT_MAP;
 }): React.JSX.Element {
+  const { card, iconBg, title: titleCls } = FEATURE_ACCENT_MAP[accent];
   return (
-    <div className="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-[#2563EB]/20 hover:shadow-md">
-      <div className="mb-4 flex size-12 items-center justify-center rounded-lg bg-[#2563EB]/10">
+    <div className={`group rounded-xl border bg-white p-6 shadow-sm transition-all hover:shadow-md ${card}`}>
+      <div className={`mb-4 flex size-12 items-center justify-center rounded-xl ${iconBg} shadow-sm`}>
         {icon}
       </div>
-      <h3 className="text-lg font-semibold text-[#1E3A5F]">{title}</h3>
+      <h3 className={`text-lg font-semibold ${titleCls}`}>{title}</h3>
       <p className="mt-2 text-sm leading-relaxed text-slate-600">
         {description}
       </p>
@@ -428,6 +580,12 @@ function MobileNav(): React.JSX.Element {
           className="block rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
         >
           See Demo
+        </Link>
+        <Link
+          href="#why-localbot"
+          className="block rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+        >
+          Why LocalBot AI
         </Link>
         <Link
           href="#features"
