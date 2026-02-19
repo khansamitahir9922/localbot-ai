@@ -133,11 +133,15 @@ export default function BillingPage() {
       return;
     }
     setCheckoutLoading(priceId);
+    const returnTo = searchParams.get("returnTo");
     try {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId }),
+        body: JSON.stringify({
+          priceId,
+          ...(returnTo && returnTo.startsWith("/") ? { returnTo } : {}),
+        }),
         credentials: "include",
       });
       const data = (await res.json()) as { url?: string; sessionId?: string; error?: string };

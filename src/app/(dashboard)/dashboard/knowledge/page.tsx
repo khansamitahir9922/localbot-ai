@@ -237,43 +237,63 @@ export default function KnowledgeBasePage(): React.JSX.Element {
       return;
     }
 
-    const { data: workspaces } = await supabase
-      .from("workspaces")
-      .select("id, business_type")
-      .eq("user_id", user.id)
-      .limit(1);
+    /* Fetch ALL workspaces (same as Dashboard) with one retry to avoid redirect-to-onboarding race */
+    let workspaces: { id: string; business_type: string }[] | null = null;
+    let wsError: Error | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await supabase
+        .from("workspaces")
+        .select("id, business_type")
+        .eq("user_id", user.id);
+      workspaces = result.data;
+      wsError = result.error;
+      if (!result.error && Array.isArray(result.data) && result.data.length > 0)
+        break;
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 600));
+    }
 
-    if (!workspaces || workspaces.length === 0) {
-      window.location.href = "/onboarding";
+    if (wsError || !workspaces || workspaces.length === 0) {
+      if (!wsError && workspaces && workspaces.length === 0) {
+        window.location.href = "/onboarding";
+      }
+      if (wsError) {
+        setIsLoading(false);
+        toast.error("Failed to load workspace. Please refresh.");
+      }
       return;
     }
 
-    const workspaceId = workspaces[0].id as string;
+    /* Use ALL workspaces (same as Dashboard / My Chatbots) so Knowledge Base shows all your chatbots */
+    const workspaceIds = workspaces.map((w) => w.id);
     const businessType = (workspaces[0].business_type as string) ?? "other";
 
-    /* Get all chatbots in the workspace */
+    /* Get all chatbots across all workspaces, newest first */
     const { data: chatbots } = await supabase
       .from("chatbots")
-      .select("id, bot_name")
-      .eq("workspace_id", workspaceId)
-      .order("created_at", { ascending: true });
+      .select("id, bot_name, workspace_id")
+      .in("workspace_id", workspaceIds)
+      .order("created_at", { ascending: false });
 
     if (!chatbots || chatbots.length === 0) {
-      setCtx({ chatbotId: "", workspaceId, businessType });
+      setCtx({ chatbotId: "", workspaceId: workspaceIds[0] ?? "", businessType });
       setChatbotsList([]);
       setIsLoading(false);
       return;
     }
 
-    const list = chatbots as { id: string; bot_name: string }[];
-    setChatbotsList(list);
-    const chatbotId = list[0].id;
-    setCtx({ chatbotId, workspaceId, businessType });
+    const list = chatbots as { id: string; bot_name: string; workspace_id: string }[];
+    setChatbotsList(list.map((c) => ({ id: c.id, bot_name: c.bot_name })));
+    const firstChatbot = list[0];
+    setCtx({
+      chatbotId: firstChatbot.id,
+      workspaceId: firstChatbot.workspace_id,
+      businessType,
+    });
 
     const { data: qaPairs, error } = await supabase
       .from("qa_pairs")
       .select("id, chatbot_id, question, answer, created_at")
-      .eq("chatbot_id", chatbotId)
+      .eq("chatbot_id", firstChatbot.id)
       .order("created_at", { ascending: false });
 
     if (error) toast.error("Failed to load Q&A pairs.");
@@ -1158,8 +1178,8 @@ export default function KnowledgeBasePage(): React.JSX.Element {
                   Crawling website…
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  This may take up to a minute. We&apos;re reading your
-                  website and generating Q&A pairs with AI.
+                  This may take 1–2 minutes for larger sites. We&apos;re
+                  reading your website and generating Q&A pairs with AI.
                 </p>
               </div>
             </div>

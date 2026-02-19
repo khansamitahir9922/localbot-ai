@@ -33,6 +33,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const priceId = (body as { priceId: string }).priceId.trim();
+    const returnTo = typeof (body as { returnTo?: string }).returnTo === "string"
+      ? (body as { returnTo: string }).returnTo.trim()
+      : undefined;
     // Stripe Checkout requires a Price ID (price_xxx), not a Product ID (prod_xxx)
     if (priceId.startsWith("prod_")) {
       return NextResponse.json(
@@ -53,10 +56,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const stripe = getStripe();
 
+    // If returnTo is provided (e.g. /onboarding when upgrading from onboarding), send user there after payment
+    const successPath =
+      returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")
+        ? returnTo
+        : "/dashboard/billing";
+    const successUrl =
+      successPath === "/dashboard/billing"
+        ? `${APP_URL}/dashboard/billing?success=true`
+        : `${APP_URL}${successPath}`;
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${APP_URL}/dashboard/billing?success=true`,
+      success_url: successUrl,
       cancel_url: `${APP_URL}/dashboard/billing?canceled=true`,
       client_reference_id: user.id,
       customer_email: user.email ?? undefined,

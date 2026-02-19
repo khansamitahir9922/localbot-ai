@@ -112,11 +112,21 @@ export default function DashboardPage(): React.JSX.Element {
         return;
       }
 
-      /* ── Workspace check: need at least one ── */
-      const { data: workspaces, error: wsError } = await supabase
-        .from("workspaces")
-        .select("id, name")
-        .eq("user_id", user.id);
+      /* ── Workspace check: need at least one (retry once to avoid race after onboarding) ── */
+      let workspaces: { id: string; name: string }[] | null = null;
+      let wsError: unknown = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const result = await supabase
+          .from("workspaces")
+          .select("id, name")
+          .eq("user_id", user.id);
+        workspaces = result.data;
+        wsError = result.error;
+        const hasWorkspace =
+          !result.error && Array.isArray(result.data) && result.data.length > 0;
+        if (hasWorkspace) break;
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 600));
+      }
 
       const hasWorkspace =
         !wsError && Array.isArray(workspaces) && workspaces.length > 0;

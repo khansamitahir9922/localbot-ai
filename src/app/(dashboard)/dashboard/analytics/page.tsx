@@ -139,7 +139,7 @@ export default function AnalyticsPage(): React.JSX.Element {
         .from("workspaces")
         .select("id")
         .eq("user_id", user.id);
-      const wsIds = (workspaces ?? []).map((w) => w.id as string);
+      const wsIds = (workspaces ?? []).map((w: { id: string }) => w.id);
       if (wsIds.length === 0) {
         setError("No workspace found. Complete onboarding first.");
         setLoading(false);
@@ -150,9 +150,9 @@ export default function AnalyticsPage(): React.JSX.Element {
         .select("id, name")
         .in("workspace_id", wsIds)
         .order("created_at", { ascending: false });
-      const list = (chatbots ?? []).map((c) => ({
-        id: c.id as string,
-        name: (c.name as string) || "Unnamed",
+      const list = (chatbots ?? []).map((c: { id: string; name: string | null }) => ({
+        id: c.id,
+        name: c.name || "Unnamed",
       }));
       setChatbotsList(list);
       if (list.length === 0) {
@@ -161,7 +161,7 @@ export default function AnalyticsPage(): React.JSX.Element {
         return;
       }
       const urlChatbotId = searchParams.get("chatbotId");
-      if (urlChatbotId && list.some((c) => c.id === urlChatbotId)) {
+      if (urlChatbotId && list.some((c: ChatbotOption) => c.id === urlChatbotId)) {
         setSelectedChatbotId(urlChatbotId);
         loadAnalytics(urlChatbotId);
         checkStatus(urlChatbotId);
@@ -393,8 +393,8 @@ export default function AnalyticsPage(): React.JSX.Element {
                           borderRadius: "8px",
                           border: "1px solid #e2e8f0",
                         }}
-                        formatter={(value: number) => [
-                          value,
+                        formatter={(value: number | undefined) => [
+                          value ?? 0,
                           "Conversations",
                         ]}
                         labelFormatter={(label) => label}

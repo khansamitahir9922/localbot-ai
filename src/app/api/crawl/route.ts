@@ -67,13 +67,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { url, chatbotId } = body as { url: string; chatbotId: string };
-
-    if (!url.trim()) {
+    let { url, chatbotId } = body as { url: string; chatbotId: string };
+    url = url.trim();
+    if (!url) {
       return NextResponse.json(
         { error: "'url' must not be empty." },
         { status: 400 }
       );
+    }
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      url = `https://${url}`;
     }
 
     /* ── Verify the user owns this chatbot ── */
@@ -112,23 +115,45 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       apiKey: process.env.FIRECRAWL_API_KEY,
     });
 
+    const BLOCKED_MESSAGE =
+      "This website does not allow our crawler to access its content (many sites, like Amazon, block automated tools). Please add your questions and answers manually in the Knowledge base.";
+
     let crawlJob;
     try {
       crawlJob = await firecrawl.crawl(url, {
         limit: MAX_PAGES,
         scrapeOptions: {
-          formats: ["markdown"],
+          formats: [{ type: "markdown" }],
+          timeout: 60_000,
         },
-        timeout: CRAWL_TIMEOUT_MS / 1000,
       });
-    } catch (crawlErr) {
-      console.error("[/api/crawl] Firecrawl error:", crawlErr);
+    } catch (crawlErr: unknown) {
+      const errDetails =
+        crawlErr && typeof crawlErr === "object" && "details" in crawlErr
+          ? (crawlErr as { details?: unknown }).details
+          : undefined;
+      console.error("[/api/crawl] Firecrawl error:", crawlErr, "details:", errDetails);
+      const errMsg =
+        crawlErr instanceof Error ? crawlErr.message : String(crawlErr);
+      const isBlocked =
+        /block|robots|denied|forbidden|403|access denied|disallow|cannot crawl/i.test(
+          errMsg
+        );
       return NextResponse.json(
         {
-          error:
-            "Failed to crawl the website. Please check the URL and try again.",
+          error: isBlocked
+            ? BLOCKED_MESSAGE
+            : "Failed to crawl the website. Please check the URL and try again.",
         },
         { status: 502 }
+      );
+    }
+
+    /* Handle failed or blocked crawl explicitly */
+    if (crawlJob?.status === "failed" || crawlJob?.status === "cancelled") {
+      return NextResponse.json(
+        { error: BLOCKED_MESSAGE },
+        { status: 422 }
       );
     }
 
@@ -142,7 +167,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         {
           error:
-            "No content could be extracted from the website. The site might block crawlers or the URL may be invalid.",
+            "No content could be extracted from the website. The site might block crawlers (like Amazon) or the URL may be invalid. Try adding Q&A pairs manually in Knowledge base.",
         },
         { status: 422 }
       );
