@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -32,19 +32,12 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-/* ──────────────────────────── PAGE COMPONENT ──────────────────────────── */
+/* ──────────────────────────── LOGIN CONTENT (uses useSearchParams) ──────────────────────────── */
 
 /**
- * Login page for LocalBot AI.
- *
- * Renders a centered login card with email and password fields.
- * Uses react-hook-form + zod for client-side validation and calls
- * Supabase Auth `signInWithPassword()` on submit.
- *
- * After successful login the user is sent to the URL stored in the
- * `?redirectTo` query param (set by middleware) or `/dashboard` by default.
+ * Inner login form. Must be wrapped in Suspense because it uses useSearchParams().
  */
-export default function LoginPage(): React.JSX.Element {
+function LoginContent(): React.JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -223,5 +216,25 @@ export default function LoginPage(): React.JSX.Element {
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+/* ──────────────────────────── PAGE (Suspense boundary for useSearchParams) ──────────────────────────── */
+
+/**
+ * Login page for LocalBot AI.
+ * Wraps content in Suspense so useSearchParams() is allowed during static export.
+ */
+export default function LoginPage(): React.JSX.Element {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 py-12">
+          <Loader2 className="size-8 animate-spin text-[#2563EB]" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }
