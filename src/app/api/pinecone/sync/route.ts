@@ -101,7 +101,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const batch = qaPairs.slice(i, i + BATCH_SIZE);
 
       const vectors = batch
-        .map((row) => {
+        .map((row: { id: string; question: string; answer: string; embedding: unknown }) => {
           /*
            * Supabase may return the vector column as a JSON string
            * (e.g. "[0.123, -0.456, ...]") instead of an actual array.
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           };
         })
         .filter(
-          (v): v is NonNullable<typeof v> => v !== null
+          (v: { id: string; values: number[]; metadata: VectorMetadata } | null): v is { id: string; values: number[]; metadata: VectorMetadata } => v !== null
         );
 
       if (vectors.length === 0) {

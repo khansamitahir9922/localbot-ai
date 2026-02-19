@@ -1119,7 +1119,7 @@ function Step4Deploy(): React.JSX.Element {
           chatbotId: (data as { id: string }).id,
           embedToken: (data as { embed_token?: string }).embed_token,
         });
-        setEmbedToken((data as { embed_token?: string }).embed_token);
+        setEmbedToken((data as { embed_token?: string }).embed_token ?? null);
         setIsCreating(false);
         toast.success("Chatbot created successfully!");
       } catch {

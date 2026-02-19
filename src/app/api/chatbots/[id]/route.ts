@@ -210,7 +210,7 @@ export async function DELETE(
       .from("qa_pairs")
       .select("id")
       .eq("chatbot_id", id);
-    const qaIds = (qaRows ?? []).map((r) => r.id as string);
+    const qaIds = (qaRows ?? []).map((r: { id: string }) => r.id);
 
     /* Delete Pinecone vectors (optional; ignore errors if Pinecone not configured) */
     if (qaIds.length > 0) {
@@ -226,7 +226,7 @@ export async function DELETE(
       .from("conversations")
       .select("id")
       .eq("chatbot_id", id);
-    const convIds = (convRows ?? []).map((r) => r.id as string);
+    const convIds = (convRows ?? []).map((r: { id: string }) => r.id);
 
     /* Delete messages in those conversations */
     if (convIds.length > 0) {

@@ -63,7 +63,7 @@ export async function upsertVector(
       {
         id,
         values: vector,
-        metadata,
+        metadata: metadata as unknown as Record<string, string | number | boolean | string[]>,
       },
     ],
   });
@@ -77,7 +77,12 @@ export async function upsertVectorsBatch(
 ): Promise<void> {
   if (vectors.length === 0) return;
   const index = getPineconeIndex();
-  await index.upsert({ records: vectors });
+  const records = vectors.map(({ id, values, metadata }) => ({
+    id,
+    values,
+    metadata: metadata as unknown as Record<string, string | number | boolean | string[]>,
+  }));
+  await index.upsert({ records });
 }
 
 /* ────────────────────────── Query ────────────────────────── */

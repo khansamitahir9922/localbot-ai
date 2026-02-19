@@ -107,10 +107,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
           expand: ["items.data.price"],
         });
-        const priceId = subscription.items.data[0]?.price?.id;
+        const sub = subscription as { items: { data: Array<{ price?: { id?: string } }> }; current_period_end?: number };
+        const priceId = sub.items.data[0]?.price?.id;
         const plan = priceId ? priceIdToPlan(priceId) : "paid";
-        const currentPeriodEnd = subscription.current_period_end
-          ? new Date(subscription.current_period_end * 1000).toISOString()
+        const currentPeriodEnd = sub.current_period_end
+          ? new Date(sub.current_period_end * 1000).toISOString()
           : null;
 
         const { data: existing } = await supabase
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
+        const subscription = event.data.object as Stripe.Subscription & { current_period_end?: number };
         const subscriptionId = subscription.id;
         const priceId = subscription.items.data[0]?.price?.id;
         const plan = priceId ? priceIdToPlan(priceId) : "paid";

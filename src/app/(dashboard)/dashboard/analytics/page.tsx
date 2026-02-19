@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -74,7 +74,7 @@ interface ChatbotOption {
   name: string;
 }
 
-export default function AnalyticsPage(): React.JSX.Element {
+function AnalyticsContent(): React.JSX.Element {
   const searchParams = useSearchParams();
   const [chatbotsList, setChatbotsList] = useState<ChatbotOption[]>([]);
   const [selectedChatbotId, setSelectedChatbotId] = useState<string | null>(null);
@@ -522,5 +522,19 @@ export default function AnalyticsPage(): React.JSX.Element {
         <p className="text-sm text-amber-600">{error}</p>
       )}
     </div>
+  );
+}
+
+export default function AnalyticsPage(): React.JSX.Element {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <Loader2 className="size-10 animate-spin text-[#2563EB]" />
+        </div>
+      }
+    >
+      <AnalyticsContent />
+    </Suspense>
   );
 }

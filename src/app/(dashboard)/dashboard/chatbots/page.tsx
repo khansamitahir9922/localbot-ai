@@ -91,7 +91,7 @@ export default function ChatbotsPage(): React.JSX.Element {
       .from("workspaces")
       .select("id")
       .eq("user_id", user.id);
-    const wsIds = (workspaces ?? []).map((w) => w.id as string);
+    const wsIds = (workspaces ?? []).map((w: { id: string }) => w.id);
     if (wsIds.length === 0) {
       setChatbots([]);
       setLoading(false);

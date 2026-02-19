@@ -31,7 +31,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         .from("workspaces")
         .select("id")
         .eq("user_id", user.id);
-      const wsIds = (workspaces ?? []).map((w) => w.id as string);
+      const wsIds = (workspaces ?? []).map((w: { id: string }) => w.id);
       if (wsIds.length === 0) {
         return NextResponse.json({ error: "No workspace found." }, { status: 404 });
       }
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         .from("chatbots")
         .select("id")
         .in("workspace_id", wsIds);
-      const botIds = (chatbots ?? []).map((b) => b.id as string);
+      const botIds = (chatbots ?? []).map((b: { id: string }) => b.id);
       if (botIds.length === 0) {
         return NextResponse.json({ error: "No chatbot found." }, { status: 404 });
       }
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .gte("created_at", startOfMonthIso)
       .order("created_at", { ascending: true });
 
-    const conversationIds = (conversations ?? []).map((c) => c.id as string);
+    const conversationIds = (conversations ?? []).map((c: { id: string }) => c.id);
     const totalConversations = conversationIds.length;
 
     const chatbotName = (bot as { name?: string }).name ?? "Chatbot";
@@ -148,8 +148,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const dayStart = d.toISOString();
       const dayEnd = next.toISOString();
       const count = (conversations ?? []).filter(
-        (c) => {
-          const t = (c as { created_at?: string }).created_at;
+        (c: { created_at?: string }) => {
+          const t = c.created_at;
           return t && t >= dayStart && t < dayEnd;
         }
       ).length;

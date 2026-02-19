@@ -82,7 +82,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .from("workspaces")
       .select("id")
       .eq("user_id", user.id);
-    const wsIds = (userWorkspaces ?? []).map((w) => w.id as string);
+    const wsIds = (userWorkspaces ?? []).map((w: { id: string }) => w.id);
     if (wsIds.length === 0) {
       return NextResponse.json({ error: "No workspace." }, { status: 400 });
     }
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .from("chatbots")
       .select("id")
       .in("workspace_id", wsIds);
-    const cbIds = (userChatbots ?? []).map((c) => c.id as string);
+    const cbIds = (userChatbots ?? []).map((c: { id: string }) => c.id);
 
     const { count: existingCount } = await supabase
       .from("qa_pairs")
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({
       inserted: inserted?.length ?? 0,
-      ids: (inserted ?? []).map((r) => r.id),
+      ids: (inserted ?? []).map((r: { id: string }) => r.id),
     });
   } catch (err: unknown) {
     console.error("[api/qa-pairs]", err);

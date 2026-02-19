@@ -146,7 +146,7 @@ export default function DashboardPage(): React.JSX.Element {
         .in("workspace_id", workspaceIds)
         .order("created_at", { ascending: false });
 
-      const chatbotIds = (chatbots ?? []).map((c) => c.id);
+      const chatbotIds = (chatbots ?? []).map((c: { id: string }) => c.id);
       let knowledgeCount = 0;
       if (chatbotIds.length > 0) {
         const { count } = await supabase

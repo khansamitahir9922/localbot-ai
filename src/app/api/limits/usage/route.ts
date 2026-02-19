@@ -30,7 +30,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .from("workspaces")
       .select("id")
       .eq("user_id", user.id);
-    const workspaceIds = (workspaces ?? []).map((w) => w.id as string);
+    const workspaceIds = (workspaces ?? []).map((w: { id: string }) => w.id);
 
     if (workspaceIds.length === 0) {
       return NextResponse.json({
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .from("chatbots")
       .select("id")
       .in("workspace_id", workspaceIds);
-    const chatbotIds = (userChatbots ?? []).map((c) => c.id as string);
+    const chatbotIds = (userChatbots ?? []).map((c: { id: string }) => c.id);
 
     let conversationsUsed = 0;
     if (chatbotIds.length > 0) {

@@ -69,7 +69,7 @@ export async function GET(
       .eq("chatbot_id", id)
       .order("created_at", { ascending: true });
 
-    const convIds = (conversations ?? []).map((c) => c.id as string);
+    const convIds = (conversations ?? []).map((c: { id: string }) => c.id);
     let messages: unknown[] = [];
     if (convIds.length > 0) {
       const { data: msgs } = await supabase

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod/v4";
@@ -85,7 +85,7 @@ interface ChatbotData {
 
 /* ────────────────────────── PAGE ────────────────────────── */
 
-export default function SettingsPage(): React.JSX.Element {
+function SettingsContent(): React.JSX.Element {
   const searchParams = useSearchParams();
   const urlChatbotId = searchParams.get("chatbotId");
   const [chatbotId, setChatbotId] = useState<string | null>(null);
@@ -124,7 +124,7 @@ export default function SettingsPage(): React.JSX.Element {
       .from("workspaces")
       .select("id")
       .eq("user_id", user.id);
-    const wsIds = (workspaces ?? []).map((w) => w.id as string);
+    const wsIds = (workspaces ?? []).map((w: { id: string }) => w.id);
     if (wsIds.length === 0) {
       setLoading(false);
       return;
@@ -816,5 +816,19 @@ export default function SettingsPage(): React.JSX.Element {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function SettingsPage(): React.JSX.Element {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-[#2563EB]" />
+        </div>
+      }
+    >
+      <SettingsContent />
+    </Suspense>
   );
 }

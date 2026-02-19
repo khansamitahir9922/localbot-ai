@@ -30,5 +30,6 @@ export async function getUserPlan(userId: string): Promise<PlanId> {
     .order("current_period_end", { ascending: false, nullsFirst: true })
     .limit(1)
     .maybeSingle();
-  return normalizePlan((data?.plan as string) ?? null);
+  const plan = (data as { plan?: string } | null)?.plan;
+  return normalizePlan(plan ?? null);
 }

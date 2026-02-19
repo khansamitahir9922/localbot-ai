@@ -46,7 +46,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .from("workspaces")
       .select("id")
       .eq("user_id", user.id);
-    const wsIds = (allWorkspaces ?? []).map((w) => w.id as string);
+    const wsIds = (allWorkspaces ?? []).map((w: { id: string }) => w.id);
     if (wsIds.length === 0) {
       return NextResponse.json({ error: "No workspace found." }, { status: 400 });
     }

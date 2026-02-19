@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CreditCard, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -23,7 +23,7 @@ interface Subscription {
   current_period_end: string | null;
 }
 
-export default function BillingPage() {
+function BillingContent() {
   const searchParams = useSearchParams();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -62,10 +62,11 @@ export default function BillingPage() {
       }
 
       if (subResult.data) {
+        const row = subResult.data as { plan?: string; status?: string; current_period_end?: string | null };
         setSubscription({
-          plan: (subResult.data.plan as string) ?? "free",
-          status: (subResult.data.status as string) ?? "active",
-          current_period_end: subResult.data.current_period_end as string | null,
+          plan: row.plan ?? "free",
+          status: row.status ?? "active",
+          current_period_end: row.current_period_end ?? null,
         });
       } else {
         setSubscription({ plan: "free", status: "active", current_period_end: null });
@@ -104,13 +105,12 @@ export default function BillingPage() {
             const usageRes = await fetch("/api/limits/usage", { credentials: "include" });
             if (usageRes.ok) {
               const usageData = (await usageRes.json()) as { plan?: string };
-              if (usageData.plan) {
-                setSubscription((prev) => ({
-                  ...prev,
-                  plan: usageData.plan!,
-                  status: "active",
-                  current_period_end: prev?.current_period_end ?? null
-                }));
+            if (usageData.plan) {
+            setSubscription((prev) => ({
+              plan: usageData.plan!,
+              status: "active",
+              current_period_end: prev?.current_period_end ?? null,
+            }));
               }
             }
             toast.success("Subscription started. Welcome!");
@@ -190,9 +190,9 @@ export default function BillingPage() {
           const usageData = (await usageRes.json()) as { plan?: string };
           if (usageData.plan) {
             setSubscription((prev) => ({
-              ...prev,
               plan: usageData.plan!,
               status: "active",
+              current_period_end: prev?.current_period_end ?? null,
             }));
           }
         }
@@ -351,5 +351,19 @@ export default function BillingPage() {
         })}
       </div>
     </div>
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-[#2563EB]" />
+        </div>
+      }
+    >
+      <BillingContent />
+    </Suspense>
   );
 }
