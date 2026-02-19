@@ -105,7 +105,12 @@ export default function BillingPage() {
             if (usageRes.ok) {
               const usageData = (await usageRes.json()) as { plan?: string };
               if (usageData.plan) {
-                setSubscription((prev) => ({ ...prev, plan: usageData.plan!, status: "active" }));
+                setSubscription((prev) => ({
+                  ...prev,
+                  plan: usageData.plan!,
+                  status: "active",
+                  current_period_end: prev?.current_period_end ?? null
+                }));
               }
             }
             toast.success("Subscription started. Welcome!");
