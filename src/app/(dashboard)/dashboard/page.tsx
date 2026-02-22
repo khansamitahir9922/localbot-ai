@@ -435,6 +435,7 @@ export default function DashboardPage(): React.JSX.Element {
             <ChecklistItem
               done={false}
               label="Embed the widget on your website"
+              href="/dashboard/embed"
             />
             <ChecklistItem
               done={false}
@@ -485,12 +486,14 @@ function MetricCard({
 function ChecklistItem({
   done,
   label,
+  href,
 }: {
   done: boolean;
   label: string;
+  href?: string;
 }): React.JSX.Element {
-  return (
-    <div className="flex items-center gap-3">
+  const content = (
+    <>
       <div
         className={cn(
           "flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold",
@@ -511,6 +514,17 @@ function ChecklistItem({
       >
         {label}
       </span>
-    </div>
+    </>
   );
+  if (href && !done) {
+    return (
+      <Link
+        href={href}
+        className="flex items-center gap-3 rounded-lg transition-colors hover:bg-slate-50"
+      >
+        {content}
+      </Link>
+    );
+  }
+  return <div className="flex items-center gap-3">{content}</div>;
 }

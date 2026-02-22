@@ -45,7 +45,7 @@ export default function HelpPage(): React.JSX.Element {
           <section>
             <h2 className="text-lg font-semibold text-[#1E3A5F]">Where do I get the embed code?</h2>
             <p className="mt-1 text-slate-600">
-              In your dashboard, open your bot and go to the &quot;Embed&quot; or &quot;Install&quot; section. Copy the script tag and paste it before the closing &lt;/body&gt; of your site.
+              In your dashboard, go to <Link href="/dashboard/embed" className="font-medium text-[#2563EB] hover:underline">Embed</Link> in the sidebar. Copy the script tag and paste it before the closing &lt;/body&gt; of your site.
             </p>
           </section>
           <section>

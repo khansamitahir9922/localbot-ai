@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -7,6 +8,7 @@ import {
   BarChart3,
   Bot,
   BookOpen,
+  Code,
   CreditCard,
   Home,
   Loader2,
@@ -56,6 +58,11 @@ const NAV_ITEMS: NavItem[] = [
     label: "Knowledge Base",
     href: "/dashboard/knowledge",
     icon: <BookOpen className="size-5" />,
+  },
+  {
+    label: "Embed",
+    href: "/dashboard/embed",
+    icon: <Code className="size-5" />,
   },
   {
     label: "Analytics",
