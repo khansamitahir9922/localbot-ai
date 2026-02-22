@@ -22,6 +22,13 @@ import { getTierLimits } from "@/lib/tier-limits";
    7. Return answer
    ───────────────────────────────────────────────────────────── */
 
+/** CORS headers so the widget can be embedded on any site (CodePen, customer sites, etc.) */
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 /* ────────────────────────── Config ────────────────────────── */
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
@@ -99,6 +106,11 @@ function isRateLimited(token: string): boolean {
 
 /* ────────────────────────── Route Handler ────────────────────────── */
 
+/** OPTIONS handler for CORS preflight */
+export async function OPTIONS(): Promise<NextResponse> {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     /* ── Parse body ── */
@@ -113,7 +125,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ) {
       return NextResponse.json(
         { error: "Body must include token, message, and session_id (all strings)." },
-        { status: 400 }
+        { status: 400, headers: CORS_HEADERS }
       );
     }
 
@@ -126,7 +138,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!token.trim() || !message.trim() || !session_id.trim()) {
       return NextResponse.json(
         { error: "token, message, and session_id must not be empty." },
-        { status: 400 }
+        { status: 400, headers: CORS_HEADERS }
       );
     }
 
@@ -134,7 +146,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (isRateLimited(token)) {
       return NextResponse.json(
         { error: "Too many requests. Please wait a moment and try again." },
-        { status: 429 }
+        { status: 429, headers: CORS_HEADERS }
       );
     }
 
@@ -155,7 +167,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (cbError || !chatbot) {
       return NextResponse.json(
         { error: "Chatbot not found. Check your embed token." },
-        { status: 404 }
+        { status: 404, headers: CORS_HEADERS }
       );
     }
 
@@ -198,7 +210,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                 error:
                   "Conversation limit reached for this month. Please upgrade your plan or try again next month.",
               },
-              { status: 402 }
+              { status: 402, headers: CORS_HEADERS }
             );
           }
         }
@@ -228,7 +240,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!queryVector || queryVector.length === 0) {
       return NextResponse.json(
         { error: "Failed to process your message." },
-        { status: 502 }
+        { status: 502, headers: CORS_HEADERS }
       );
     }
 
@@ -331,7 +343,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             convError?.message
           );
           /* Still return the answer even if we can't save */
-          return NextResponse.json({ answer, confidence });
+          return NextResponse.json({ answer, confidence }, { headers: CORS_HEADERS });
         }
 
         conversationId = newConv.id as string;
@@ -359,14 +371,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
        STEP 7 — Return response
        ═══════════════════════════════════════════════════════════ */
 
-    return NextResponse.json({ answer, confidence });
+    return NextResponse.json({ answer, confidence }, { headers: CORS_HEADERS });
   } catch (error: unknown) {
     console.error("[/api/chat] Unexpected error:", error);
     const message =
       error instanceof Error ? error.message : "Unknown error occurred.";
     return NextResponse.json(
       { error: `Chat failed: ${message}` },
-      { status: 500 }
+      { status: 500, headers: CORS_HEADERS }
     );
   }
 }

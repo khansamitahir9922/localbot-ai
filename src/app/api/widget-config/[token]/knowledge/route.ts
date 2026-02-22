@@ -1,6 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+/** CORS headers so the widget can be embedded on any site */
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 /**
  * GET /api/widget-config/[token]/knowledge
  * Public: returns knowledge base (Q&A pairs) for the widget. Used by FAQs and Articles tabs.
@@ -23,7 +30,7 @@ export async function GET(
   try {
     const { token } = await params;
     if (!token?.trim()) {
-      return NextResponse.json({ error: "Token is required." }, { status: 400 });
+      return NextResponse.json({ error: "Token is required." }, { status: 400, headers: CORS_HEADERS });
     }
 
     const supabase = getSupabaseAdmin();
@@ -35,7 +42,7 @@ export async function GET(
       .single();
 
     if (botError || !chatbot) {
-      return NextResponse.json({ error: "Chatbot not found." }, { status: 404 });
+      return NextResponse.json({ error: "Chatbot not found." }, { status: 404, headers: CORS_HEADERS });
     }
 
     const chatbotId = (chatbot as { id: string }).id;
@@ -52,7 +59,7 @@ export async function GET(
       console.error("[/api/widget-config/.../knowledge]", error);
       return NextResponse.json(
         { error: "Failed to load knowledge base." },
-        { status: 500 }
+        { status: 500, headers: CORS_HEADERS }
       );
     }
 
@@ -61,8 +68,9 @@ export async function GET(
       answer: (r.answer as string) ?? "",
     }));
 
-    return NextResponse.json({
-      categories: [
+    return NextResponse.json(
+      {
+        categories: [
         {
           id: "default",
           name: "Knowledge Base",
@@ -70,12 +78,14 @@ export async function GET(
           items,
         },
       ],
-    });
+    },
+      { headers: CORS_HEADERS }
+    );
   } catch (err: unknown) {
     console.error("[/api/widget-config/.../knowledge]", err);
     return NextResponse.json(
       { error: "Failed to load knowledge base." },
-      { status: 500 }
+      { status: 500, headers: CORS_HEADERS }
     );
   }
 }

@@ -32,13 +32,12 @@ export default function RootLayout({
       >
         {children}
         <Toaster position="top-right" richColors closeButton />
-        {/* Chat widget on this app: one bot is shown (by data-token). This is for testing only.
-            The token below is fixed – e.g. "tahir dopatta Assistant". The Analytics dropdown shows
-            which bot's data you're viewing; the bubble here stays this one bot unless you change the token. */}
+        {/* Chat widget: only ONE script must be on the page. Do not add a second script in Inspect — it breaks loading.
+            To show YOUR bot on this site: set NEXT_PUBLIC_WIDGET_TOKEN in Vercel to your bot's embed token, then redeploy. */}
         <Script
           id="lba-widget"
           src="/widget.js?v=8"
-          data-token="4e9b9ef4-8d15-4434-bab1-c667eba4345a"
+          data-token={process.env.NEXT_PUBLIC_WIDGET_TOKEN ?? "4e9b9ef4-8d15-4434-bab1-c667eba4345a"}
           strategy="afterInteractive"
         />
       </body>
