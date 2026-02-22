@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -32,6 +33,7 @@ export default function RootLayout({
       >
         {children}
         <Toaster position="top-right" richColors closeButton />
+        <Analytics />
         {/* Chat widget: only ONE script must be on the page. Do not add a second script in Inspect — it breaks loading.
             To show YOUR bot on this site: set NEXT_PUBLIC_WIDGET_TOKEN in Vercel to your bot's embed token, then redeploy. */}
         <Script
